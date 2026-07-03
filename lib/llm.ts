@@ -3,19 +3,26 @@
  * job_finder_v2/electron/llm/provider.ts. Zero-runtime-dependency LLM client
  * with automatic fallback chaining (see providerChain/generate below).
  *
- * ONE deviation from the source package, called out per
- * SPRINT_EXECUTION_PLAN.md §2 rule 5: the original providerChain()
- * unconditionally puts an openai-compat provider (local/cloud Ollama) first in
- * the chain. That fits llmswitch's original desktop-app context (a local
- * Ollama is always reachable). This app is a Vercel serverless deployment
- * with no local Ollama, and the build plan (§3) makes Anthropic the sole
- * provider for now — so here the openai-compat leg is only added when
- * `openaiCompatUrl` is actually configured. With it unset (the default),
- * Anthropic is the sole/primary provider, matching the product's actual
- * requirements. Everything else is unchanged from the source.
+ * PROVIDER (decided S1, updated from S0's Anthropic default): the pipeline
+ * runs on the developer's self-hosted Ollama via its OpenAI-compatible
+ * endpoint (http://localhost:11434/v1), using a cloud-tagged model
+ * (kimi-k2.6:cloud — a general Kimi K2, strong at persuasive copy + structured
+ * JSON). Anthropic is retained purely as an optional fallback leg: if
+ * ANTHROPIC_API_KEY is ever set it slots in after Ollama, otherwise it is
+ * skipped entirely. There is no localhost reachability from Vercel, so for now
+ * the live pipeline runs locally (`npm run dev`); a cloudflared tunnel that
+ * fronts Ollama is a planned S5 deliverable (see SPRINT_EXECUTION_PLAN.md §8).
  *
- * getSettingsFromEnv() + askClaude() below are this project's wire-in: they
- * read the SettingsLike fields from env vars and give agents a one-line call.
+ * ONE structural deviation from the source package, per SPRINT_EXECUTION_PLAN.md
+ * §2 rule 5: the source unconditionally adds the openai-compat leg first. Here
+ * every leg is opt-in — the openai-compat leg is added only when
+ * `openaiCompatUrl` is set, and Anthropic only when its key is set — so the
+ * chain is exactly the providers that are actually configured, in priority
+ * order. With the default env (Ollama URL set, no Anthropic key) that yields a
+ * single-provider Ollama chain.
+ *
+ * getSettingsFromEnv() + askLLM() below are this project's wire-in: they read
+ * the SettingsLike fields from env vars and give agents a one-line call.
  *
  * The `j: any` response parsing in the source has also been narrowed to real
  * response-shape interfaces (OpenAICompatResponse/AnthropicMessagesResponse/
@@ -67,16 +74,16 @@ export interface SettingsLike {
 
 /**
  * Build the ordered provider chain for the current settings. Pure + exported
- * so it can be unit-tested without any network. The openai-compat leg is only
- * included when openaiCompatUrl is set (see file header); Anthropic is
- * skipped when no key.
+ * so it can be unit-tested without any network. The openai-compat leg (this
+ * project's primary: self-hosted Ollama) is included only when openaiCompatUrl
+ * is set; Anthropic (optional fallback) is included only when its key is set.
  */
 export function providerChain(s: SettingsLike, modelOverride?: string): ProviderDescriptor[] {
   const chain: ProviderDescriptor[] = [];
 
   if (s.openaiCompatUrl && s.openaiCompatUrl.trim()) {
     chain.push({
-      name: "ollama-cloud (openai /v1)",
+      name: "ollama (openai /v1)",
       kind: "openai-compat",
       baseUrl: s.openaiCompatUrl,
       apiKey: s.openaiCompatKey || "ollama",
@@ -261,17 +268,24 @@ export async function embed(s: SettingsLike, texts: string[]): Promise<number[][
 
 // --- Project wire-in ---------------------------------------------------
 
+/** This project's default provider config: self-hosted Ollama + a cloud Kimi. */
+export const DEFAULT_OPENAI_COMPAT_URL = "http://localhost:11434/v1";
+export const DEFAULT_MODEL = "kimi-k2.6:cloud";
+
 /**
- * Read a SettingsLike from env vars. Anthropic is the only provider expected
- * to be configured in this project (build plan §3); the openai-compat/Ollama
- * fields are left available for local dev but are unset by default, so
- * providerChain() skips that leg entirely (see file header).
+ * Read a SettingsLike from env vars. The self-hosted Ollama (openai-compat)
+ * leg is this project's primary provider and is configured by default (URL +
+ * model fall back to the constants above) so local dev needs no .env at all.
+ * Anthropic is an optional fallback: it only joins the chain if
+ * ANTHROPIC_API_KEY is set. To point at a different Ollama (e.g. a cloudflared
+ * tunnel URL in production, per SPRINT_EXECUTION_PLAN.md §8), set
+ * OPENAI_COMPAT_URL.
  */
 export function getSettingsFromEnv(): SettingsLike {
   return {
-    openaiCompatUrl: process.env.OPENAI_COMPAT_URL ?? "",
-    openaiCompatKey: process.env.OPENAI_COMPAT_KEY ?? "",
-    primaryModel: process.env.OPENAI_COMPAT_MODEL ?? "",
+    openaiCompatUrl: process.env.OPENAI_COMPAT_URL ?? DEFAULT_OPENAI_COMPAT_URL,
+    openaiCompatKey: process.env.OPENAI_COMPAT_KEY ?? "ollama",
+    primaryModel: process.env.OPENAI_COMPAT_MODEL ?? DEFAULT_MODEL,
     fallbackLocalModel: process.env.OPENAI_COMPAT_FALLBACK_MODEL ?? "",
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
     anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5",
@@ -281,6 +295,6 @@ export function getSettingsFromEnv(): SettingsLike {
 }
 
 /** One-line convenience for agents: generate() against env-sourced settings. */
-export async function askClaude(messages: ChatMessage[], opts: GenerateOpts = {}): Promise<GenerateResult> {
+export async function askLLM(messages: ChatMessage[], opts: GenerateOpts = {}): Promise<GenerateResult> {
   return generate(getSettingsFromEnv(), messages, opts);
 }
