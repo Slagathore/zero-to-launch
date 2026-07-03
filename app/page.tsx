@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { OfferBrief, Angle } from "@/agents/types";
+import type { OfferBrief, Angle, AdCopy, Platform } from "@/agents/types";
 import { EXAMPLE_OFFERS } from "@/lib/examples";
 
 /**
@@ -30,18 +30,23 @@ export default function Home() {
 
   const [brief, setBrief] = useState<OfferBrief | null>(null);
   const [angles, setAngles] = useState<Angle[] | null>(null);
+  const [copy, setCopy] = useState<AdCopy[] | null>(null);
   const [researchMeta, setResearchMeta] = useState<RunMeta | null>(null);
   const [anglesMeta, setAnglesMeta] = useState<RunMeta | null>(null);
+  const [copyMeta, setCopyMeta] = useState<RunMeta | null>(null);
 
   const [researchLoading, setResearchLoading] = useState(false);
   const [anglesLoading, setAnglesLoading] = useState(false);
+  const [copyLoading, setCopyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reset() {
     setBrief(null);
     setAngles(null);
+    setCopy(null);
     setResearchMeta(null);
     setAnglesMeta(null);
+    setCopyMeta(null);
     setError(null);
   }
 
@@ -70,6 +75,9 @@ export default function Home() {
     if (!brief) return;
     setAnglesLoading(true);
     setError(null);
+    // Regenerating angles invalidates any copy written for the old set.
+    setCopy(null);
+    setCopyMeta(null);
     try {
       const res = await fetch("/api/angles", {
         method: "POST",
@@ -84,6 +92,28 @@ export default function Home() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setAnglesLoading(false);
+    }
+  }
+
+  async function runCopy() {
+    if (!brief || !angles) return;
+    setCopyLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief, angles }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Copy generation failed.");
+      setCopy(data.copy);
+      // The copy stage returns one meta per platform; surface the first for the tag.
+      setCopyMeta(Array.isArray(data.meta) ? data.meta[0] : data.meta);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCopyLoading(false);
     }
   }
 
@@ -213,10 +243,72 @@ export default function Home() {
               </div>
             ))}
           </div>
+
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              onClick={runCopy}
+              disabled={copyLoading}
+              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              {copyLoading ? "Writing copy…" : "Generate ad copy"}
+            </button>
+            {copyMeta && <MetaTag meta={copyMeta} />}
+          </div>
+        </Card>
+      )}
+
+      {/* Step 4 — the per-platform copy */}
+      {copy && copy.length > 0 && angles && (
+        <Card step={4} title={`Ad copy (${copy.length})`}>
+          {groupByPlatform(copy).map(([platform, items]) => (
+            <div key={platform} className="mt-2 first:mt-0">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                {PLATFORM_LABELS[platform] ?? platform}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {items.map((c, i) => (
+                  <div key={`${c.angleId}-${i}`} className="flex flex-col rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
+                    <span className="mb-2 self-start rounded-full bg-neutral-500/15 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
+                      {hookFor(angles, c.angleId)}
+                    </span>
+                    <p className="text-sm font-semibold leading-snug">{c.headline}</p>
+                    <p className="mt-1 flex-1 text-sm text-neutral-600 dark:text-neutral-300">{c.primaryText}</p>
+                    {c.description && <p className="mt-1 text-xs text-neutral-500">{c.description}</p>}
+                    <span className="mt-3 self-start rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-white dark:text-neutral-900">
+                      {c.cta}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </Card>
       )}
     </main>
   );
+}
+
+const PLATFORM_LABELS: Partial<Record<Platform, string>> = {
+  meta: "Meta (Facebook / Instagram)",
+  taboola: "Taboola (native)",
+  google: "Google",
+  tiktok: "TikTok",
+};
+
+/** Group copy by platform, preserving first-seen platform order. */
+function groupByPlatform(copy: AdCopy[]): [Platform, AdCopy[]][] {
+  const groups = new Map<Platform, AdCopy[]>();
+  for (const c of copy) {
+    const list = groups.get(c.platform) ?? [];
+    list.push(c);
+    groups.set(c.platform, list);
+  }
+  return [...groups.entries()];
+}
+
+/** Look up the hook type of the angle a piece of copy was written for. */
+function hookFor(angles: Angle[], angleId: string): string {
+  return angles.find((a) => a.id === angleId)?.hookType ?? "angle";
 }
 
 /* --- small presentational components --- */
