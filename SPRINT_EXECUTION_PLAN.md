@@ -220,12 +220,16 @@ correctness-critical → Opus.
 `ComplianceVerdict` contract.
 
 **Deliverables:**
-- [ ] `lib/compliance-rules.json` — **real, ~20 high-risk patterns/platform + FTC** (expand the
-      build-plan §4 seed; label it a curated subset honestly).
-- [ ] `agents/compliance.ts` — `{angle, copy}` → `ComplianceVerdict[]` (pass/flag/block + fixes).
-- [ ] `app/api/compliance/route.ts`; wire the gate **inline** angles→copy.
-- [ ] UI: compliance badges (pass/flag/block) + suggested fixes on copy cards.
-- [ ] Deploy L3 live.
+- [x] `lib/compliance-rules.json` — **22 curated high-risk patterns** (shared/FTC + per-platform
+      Meta/Taboola/Google/TikTok), each with severity + reason + fix. `_meta` labels it a curated
+      subset honestly; FTC wording aligns with the advertorial's `FTC_BASELINE`/`FTC_RESULTS`.
+- [x] `agents/compliance.ts` — copy → `ComplianceVerdict[]` (pass/flag/block + offending text +
+      fixes). **Deterministic regex, no model call** (build plan §3) — instant + reproducible.
+- [x] `app/api/compliance/route.ts`; gate runs **inline** (auto-fires after copy in the UI).
+- [x] UI: Step 4 pass/flag/block summary + rule count; each ad card carries its verdict badge +
+      violation list (offending text → fix). `block` shown loudly, copy not hidden.
+- [x] Deploy L3 live — **the gate works on the PUBLIC Vercel URL with no tunnel** (pure regex, no
+      Ollama dependency), like the seeded advertorials.
 
 **Tests:** each rule matches its intended offending text and not clean text (per-rule unit tests);
 gate blocks/flags a deliberately non-compliant copy sample; inline wiring verified via route smoke
@@ -376,6 +380,29 @@ complete, and a working version is **submitted**.
   don't fork it. ·
   **deviations from build plan:** none in scope; the plan's "persists slug" is file+memory (no DB,
   per build-plan §3), with the committed-seed tier added so the public URL click works pre-tunnel.
+
+- **Sprint 4 (Opus 4.8 high) — 2026-07-03** ·
+  **shipped:** L3 Compliance Gate. `lib/compliance-rules.json` (22 curated shared/FTC + per-platform
+  rules), `agents/compliance.ts` (deterministic precompiled-regex scorer → pass/flag/block +
+  offending text + fix; pure, no model call), `app/api/compliance`, `coerceAdCopyList` in
+  `copy.ts`, UI Step 4 inline badges + summary. Verified live: aggressive keto ads → BLOCK/FLAG on
+  the right rules, clean copy → PASS. vitest now 96 tests. ·
+  **lives in:** `agents/compliance.ts`, `lib/compliance-rules.json`, `app/api/compliance/`,
+  `app/page.tsx`. ·
+  **live URL:** **PUBLIC, no tunnel:** `POST https://marketingapp-ashy.vercel.app/api/compliance`
+  works on the deployed site (pure regex, no Ollama). Two features now fully live on the public URL:
+  seeded `/p/[slug]` advertorials + this gate. ·
+  **next model must know:** (1) **The gate is deterministic + synchronous** — `compliance(copies)`
+  is a pure function; the S5 orchestrator can call it directly (no await/model) between copy and
+  judge. (2) It **never mutates copy** — reports only; the S5 Judge should read verdicts to prefer
+  compliant angles (e.g. down-rank anything with a `block`). (3) `summarize()` +
+  `activeRuleCount()` are ready for the run/report UI. (4) Rules `_meta.note` states the
+  curated-subset limitation — the README's what's-next should promise the policy-RAG swap; don't
+  overclaim coverage. (5) FTC strings are shared with the advertorial — one source of truth, don't
+  fork. ·
+  **deviations from build plan:** gate scores COPY (not "angles→copy"); the build plan's L3 line
+  says "between angles→copy" but the contract + file tree are copy-scoring, so verdicts attach to
+  ads. Covers Google/TikTok too (build plan minimum was Meta+Taboola+FTC).
 
 ---
 
