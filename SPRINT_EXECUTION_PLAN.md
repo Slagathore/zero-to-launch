@@ -256,6 +256,12 @@ Judge uses a distinct stronger model (route via `dependencies/llmroute`).
 - [ ] `agents/orchestrator.ts` + `app/api/run/route.ts` — streamed, stage-by-stage end-to-end run.
 - [ ] `examples/seeded-run.json` — a cached full run so the demo **never** cold-fails; UI falls back
       to it silently on any live-call failure (build-plan §8 anti-fail rules).
+- [ ] **Public exposure via cloudflared** (decided S1): the LLM provider is the developer's
+      self-hosted Ollama at `localhost:11434`, unreachable from Vercel. Create a cloudflared tunnel
+      fronting Ollama via CLI, set `OPENAI_COMPAT_URL` to the tunnel URL as a Vercel env var, and
+      write a **single unified startup script** that brings the tunnel up *before* the app and runs
+      them as one fluid start (mirrors the developer's DungeonMaster app). This is what makes the
+      Vercel URL a real clickable live demo.
 - [ ] Harden every build-plan §7 failure mode: bad URLs, empty offers, API timeout → seeded
       fallback.
 - [ ] `README.md` — answer the three scored questions in build-plan §9, **in the human's voice**
@@ -276,7 +282,22 @@ complete, and a working version is **submitted**.
 > Format per entry: **Sprint N (mode) — YYYY-MM-DD** · shipped: … · lives in: … · live URL: … ·
 > next model must know: … · deviations from build plan: …
 
-- _(S0 fills the first entry.)_
+- **Sprint 0 (Sonnet 5, + tail finished by Opus 4.8) — 2026-07-03** ·
+  **shipped:** Next.js 16 (TS/App Router/Tailwind) scaffold; `agents/types.ts` (contracts verbatim
+  from build-plan §2); `lib/llm.ts` (vendored llmswitch) + `lib/planjson.ts` (vendored planjson);
+  `app/api/ping` infra-proof route; vitest + 26 unit tests; deployed to Vercel. ·
+  **lives in:** repo root; GitHub `Slagathore/zero-to-launch` (private). ·
+  **live URL:** https://marketingapp-ashy.vercel.app (static shell + `/api/ping`). ·
+  **next model must know:** (1) **Provider is self-hosted Ollama, NOT Anthropic** — decided after
+  S0. Talks to `localhost:11434/v1`, model **`kimi-k2.6:cloud`**, via `lib/llm.ts` `askLLM()`.
+  Anthropic is only a fallback leg (chains in iff `ANTHROPIC_API_KEY` set). (2) `kimi-k2.6:cloud`
+  is a **thinking model** — always pass generous `maxTokens` (≥2048 for JSON agents) or output gets
+  eaten by the reasoning phase; `content` holds the answer, `reasoning` is the CoT. (3) Local dev
+  needs no `.env` — `getSettingsFromEnv()` defaults to Ollama+Kimi. (4) Vercel can't reach
+  `localhost`; **live LLM demo runs locally (`npm run dev`) until the S5 cloudflared tunnel**. ·
+  **deviations from build plan:** `lib/claude.ts` → **`lib/llm.ts`** (provider is Ollama, not
+  Claude); `providerChain()` legs are opt-in rather than always-Ollama-first (documented in
+  `lib/llm.ts` header).
 
 ---
 
