@@ -86,9 +86,25 @@ describe("coerceAdvertorialContent", () => {
         { type: "mystery", text: "unknown type becomes paragraph" },
       ],
     }, BRIEF, ANGLE);
-    expect(c.sections).toHaveLength(2);
+    // 2 surviving sections + the appended CTA invariant = 3
+    expect(c.sections).toHaveLength(3);
     expect(c.sections[0].text).toBe("keeps this");
     expect(c.sections[1].type).toBe("paragraph");
+  });
+
+  it("appends a CTA when the model omits one (structural invariant caught live)", () => {
+    const c = coerceAdvertorialContent({
+      sections: [{ type: "paragraph", text: "an article with no call to action" }],
+    }, BRIEF, ANGLE);
+    expect(c.sections[c.sections.length - 1].type).toBe("cta");
+    // ...and the rendered page therefore always has a CTA button:
+    const html = renderAdvertorialHtml(c, BRIEF, "2026-07-03T12:00:00.000Z");
+    expect(html).toContain('class="cta-btn"');
+  });
+
+  it("does NOT append a CTA to an empty article (empty must stay empty to trigger retry)", () => {
+    const c = coerceAdvertorialContent({ sections: [] }, BRIEF, ANGLE);
+    expect(c.sections).toEqual([]);
   });
 });
 

@@ -135,6 +135,13 @@ export function coerceAdvertorialContent(raw: unknown, brief: OfferBrief, angle:
     .map(coerceSection)
     .filter((s): s is AdvertorialSection => s !== null)
     .slice(0, MAX_SECTIONS);
+  // Structural invariant, enforced in code rather than trusted to the prompt
+  // (live testing caught the model skipping it): every non-empty advertorial
+  // ends with a CTA block — a pre-lander without a call-to-action is broken.
+  // Empty section lists stay empty so generateAdvertorial() can retry instead.
+  if (sections.length > 0 && !sections.some((s) => s.type === "cta")) {
+    sections.push({ type: "cta", text: `Curious whether ${brief.product} fits your routine?` });
+  }
   return {
     headline: asString(o.headline).trim() || angle.headlineSeed || brief.product,
     deck: asString(o.deck).trim() || angle.promise,

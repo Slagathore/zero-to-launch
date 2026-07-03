@@ -86,16 +86,30 @@ export interface AnglesOutput {
   meta: GenerateResult;
 }
 
-/** Run the Angle Swarm over an OfferBrief. */
+/**
+ * Run the Angle Swarm over an OfferBrief. Two attempts (the S2 resilient
+ * pattern, backported in S3): the thinking model occasionally returns
+ * unparseable/empty JSON on creative multi-item requests, and a fresh
+ * attempt nearly always lands.
+ */
 export async function angles(brief: OfferBrief): Promise<AnglesOutput> {
-  const { value, meta } = await generateJson<Angle[]>(
-    [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildUserMessage(brief) },
-    ],
-    coerceAngles,
-    // Higher temperature than research: we WANT creative spread here.
-    { temperature: 0.8, maxTokens: 5000 },
-  );
-  return { angles: value, meta };
+  let lastError = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { value, meta } = await generateJson<Angle[]>(
+        [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildUserMessage(brief) },
+        ],
+        coerceAngles,
+        // Higher temperature than research: we WANT creative spread here.
+        { temperature: 0.8, maxTokens: 5000 },
+      );
+      if (value.length > 0) return { angles: value, meta };
+      lastError = "swarm returned no usable angles";
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  throw new Error(`Angle generation failed after 2 attempts: ${lastError}`);
 }
