@@ -191,11 +191,13 @@ disclosure wording to standardize on.
 sprints as input.
 
 **Deliverables:**
-- [ ] `agents/advertorial.ts` — top `Angle` + `OfferBrief` → `Advertorial` (persuasive HTML +
-      `ftcDisclosure`), persisting a `slug`.
-- [ ] `app/p/[slug]/page.tsx` — serves the advertorial **live** on the same deploy.
-- [ ] `app/api/advertorial/route.ts`; link to the live page from the stepper UI.
-- [ ] Deploy L2 live; **click the real page** to confirm.
+- [x] `agents/advertorial.ts` — top `Angle` + `OfferBrief` → `Advertorial` (persuasive HTML +
+      `ftcDisclosure`), persisting a `slug`. Model emits structured JSON; a fixed escaped template
+      renders it (XSS-safe); FTC baseline hardcoded; CTA structurally guaranteed.
+- [x] `app/p/[slug]/page.tsx` — serves the advertorial **live** (memory → data/ → bundled seeds).
+- [x] `app/api/advertorial/route.ts`; Step 5 card in the stepper links to the live page.
+- [x] Deploy L2 live; **clicked the real page on the PUBLIC URL** —
+      `/p/ketoslim-gummies-curiosity-bt2j` serves from the committed seed with no tunnel.
 
 **Tests:** advertorial returns non-empty HTML containing the FTC disclosure; `/p/[slug]` renders a
 generated advertorial end-to-end; slug persistence round-trips.
@@ -347,6 +349,33 @@ complete, and a working version is **submitted**.
   **deviations from build plan:** **run on Opus 4.8, not the plan's Sonnet 5** — at the user's
   explicit request ("knock out s2 yourself"). Also added Google/TikTok copy guidance (build plan had
   them as "if time") — default output is still Meta + Taboola only.
+
+- **Sprint 3 (Fable max) — 2026-07-03** ·
+  **shipped:** L2 Advertorial. `agents/advertorial.ts` (structured-content prompt with integrity
+  rules → fixed magazine-editorial template, every model string escaped, FTC baseline hardcoded,
+  CTA-section invariant enforced in coercion), `lib/advertorialStore.ts` (memory → `data/` →
+  bundled `examples/advertorials/` seeds; slug charset guard), `app/api/advertorial`,
+  `app/p/[slug]/page.tsx`, UI Step 5 (angle selector → generate → open-live-page link). Committed
+  seed advertorial generated end-to-end live. vitest now 84 tests. ·
+  **lives in:** `agents/advertorial.ts`, `lib/advertorialStore.ts`, `app/api/advertorial/`,
+  `app/p/[slug]/`, `examples/advertorials/`. ·
+  **live URL:** **PUBLIC, no tunnel:** https://marketingapp-ashy.vercel.app/p/ketoslim-gummies-curiosity-bt2j
+  (served from the bundled seed via `outputFileTracingIncludes` in `next.config.ts`). Fresh
+  generations remain local until the S5 tunnel. ·
+  **next model must know:** (1) **Advertorials are structured JSON + a fixed template — never let
+  the model emit HTML.** All rendering safety lives in `renderAdvertorialHtml` (escape everything;
+  `safeHref` inerts non-http(s) CTA urls). (2) **Structural invariants belong in coercion, not
+  prompts** — live testing caught the model skipping the required cta section; the fix pattern
+  (append-if-missing, empty-stays-empty-to-retry) is in `coerceAdvertorialContent`. Apply the same
+  thinking to S4's gate outputs. (3) The store's read chain means anything committed to
+  `examples/advertorials/` is publicly servable at `/p/[slug]` on Vercel — S5's seeded-run should
+  lean on this for the un-killable demo. New serverless writes only hit lambda /tmp (documented
+  limitation). (4) `angles.ts` got the 2-attempt retry backported (it flaked live); all four
+  generation agents now share the resilient pattern. (5) FTC strings: `FTC_BASELINE` +
+  `FTC_RESULTS` in `agents/advertorial.ts` — S4's rules JSON should reference the same wording,
+  don't fork it. ·
+  **deviations from build plan:** none in scope; the plan's "persists slug" is file+memory (no DB,
+  per build-plan §3), with the committed-seed tier added so the public URL click works pre-tunnel.
 
 ---
 
