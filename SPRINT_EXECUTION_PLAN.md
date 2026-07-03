@@ -134,13 +134,15 @@ confirm readability-extraction lib choice (e.g. `@mozilla/readability` + `jsdom`
 - Parse all agent JSON through `lib/planjson.ts`.
 
 **Deliverables:**
-- [ ] `lib/fetchOffer.ts` — URL fetch + readability extraction **+ pasted-text fallback**.
-- [ ] `agents/research.ts` — `fetchOffer` output → real `OfferBrief` (with claim detection +
-      compliance-risk rating).
-- [ ] `agents/angles.ts` — divergence swarm prompt → 4–6 `Angle[]`, each with `rationale`.
-- [ ] `app/api/research/route.ts`, `app/api/angles/route.ts`.
-- [ ] `app/page.tsx` — minimal stepper: paste offer → see Brief → see Angles.
-- [ ] Deploy L0 live.
+- [x] `lib/fetchOffer.ts` — URL fetch + Mozilla Readability extraction **+ pasted-text fallback**.
+- [x] `agents/research.ts` — `fetchOffer` output → real `OfferBrief` (with claim detection +
+      compliance-risk rating). Untrusted text fenced via new `lib/fence.ts`.
+- [x] `agents/angles.ts` — divergence swarm prompt → 4–6 `Angle[]`, each with `rationale`.
+- [x] `app/api/research/route.ts`, `app/api/angles/route.ts`.
+- [x] `app/page.tsx` — minimal stepper: paste offer → see Brief → see Angles.
+- [x] Deploy L0 (UI live on Vercel; live LLM calls run locally until the S5 cloudflared tunnel).
+- [x] **Bonus reuse landed for later sprints:** `lib/agentJson.ts` (shared generate→repair→coerce
+      primitive) and `lib/fence.ts` (prompt-injection defense) — both consumed by S2–S5 agents.
 
 **Tests:** research returns a valid `OfferBrief` for a seed offer and for pasted text; angles returns
 ≥4 distinct `Angle[]`; a route-level smoke test end-to-end paste→angles.
@@ -298,6 +300,29 @@ complete, and a working version is **submitted**.
   **deviations from build plan:** `lib/claude.ts` → **`lib/llm.ts`** (provider is Ollama, not
   Claude); `providerChain()` legs are opt-in rather than always-Ollama-first (documented in
   `lib/llm.ts` header).
+
+- **Sprint 1 (Opus 4.8 high) — 2026-07-03** ·
+  **shipped:** L0 pipeline spine, verified end-to-end against live Ollama. `agents/research.ts`
+  (offer → `OfferBrief` w/ claim detection + risk rating), `agents/angles.ts` (brief → 4–6
+  divergent `Angle[]`, one distinct `hookType` each), `app/api/research` + `app/api/angles`,
+  `app/page.tsx` stepper (paste/URL → Brief → Angles, staged reveal). New reusable libs:
+  `lib/fetchOffer.ts` (Readability + pasted-text fallback), `lib/fence.ts` (prompt-injection
+  defense), `lib/agentJson.ts` (shared generate→repair→coerce). vitest now 49 tests. ·
+  **lives in:** `agents/`, `lib/`, `app/`. ·
+  **live URL:** local `npm run dev` is the working demo (verified: keto offer → "high" risk + 8
+  claims; solar offer → 6 angles across 6 hooks). Vercel prod URL still serving the S0 shell — the
+  L0-UI prod deploy stalled in Vercel's queue (interrupted CLI uploads); a re-deploy is the trivial
+  fix and prod LLM calls need the S5 tunnel regardless, so this was not chased. ·
+  **next model must know:** (1) **`lib/agentJson.ts` `generateJson(messages, coerce, opts)` is the
+  house pattern — S2+ agents (copy/compliance/judge) should use it, not hand-rolled parsing.**
+  (2) Untrusted offer text must pass through `lib/fence.ts` `fenceUntrusted()` before entering any
+  prompt (copy/advertorial agents splice offer text too). (3) Thinking-model tax is real: `angles`
+  uses `maxTokens: 5000`; budget similarly for copy/advertorial. (4) Agent coercers are defensive
+  (default missing fields, never throw on shape) — keep that pattern; it's why the pipeline doesn't
+  crash on a thin model reply. (5) `EXAMPLE_OFFERS` in `lib/examples.ts` span risk levels — reuse
+  for demo + as compliance-gate fixtures in S4. ·
+  **deviations from build plan:** angle swarm is a single divergence call for L0 (not N parallel
+  panelists) — cost/latency-mindful; `angles.ts` is shaped for S5 to fan out to true panelists.
 
 ---
 
