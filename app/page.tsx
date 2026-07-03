@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { OfferBrief, Angle, AdCopy, Platform } from "@/agents/types";
+import type { OfferBrief, Angle, AdCopy, Platform, ComplianceVerdict } from "@/agents/types";
 import { EXAMPLE_OFFERS } from "@/lib/examples";
 
 /**
- * L0 stepper UI (ZERO_TO_LAUNCH_BUILD_PLAN.md §2, L0): paste an offer (or a
- * URL) → Research Agent produces an OfferBrief → Angle Swarm produces divergent
- * angles. Each stage reveals its artifact in turn, matching the demo script
- * (build plan §8). Copy/compliance/advertorial/judge stages arrive in S2-S5.
+ * Stepper UI (ZERO_TO_LAUNCH_BUILD_PLAN.md §2): paste/URL offer → Research
+ * (OfferBrief) → Angle Swarm → per-platform Copy, each ad scored inline by the
+ * Compliance Gate → a live Advertorial. Each stage reveals its artifact in
+ * turn, matching the demo script (build plan §8). Judge + one-click run: S5.
  */
 
 interface RunMeta {
@@ -16,6 +16,19 @@ interface RunMeta {
   model: string;
   usedFallback: boolean;
 }
+
+interface ComplianceSummary {
+  total: number;
+  pass: number;
+  flag: number;
+  block: number;
+}
+
+const VERDICT_STYLES: Record<ComplianceVerdict["status"], string> = {
+  pass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-emerald-500/30",
+  flag: "bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-amber-500/30",
+  block: "bg-rose-500/15 text-rose-600 dark:text-rose-400 ring-rose-500/30",
+};
 
 const RISK_STYLES: Record<OfferBrief["complianceRisk"], string> = {
   low: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-emerald-500/30",
@@ -31,6 +44,9 @@ export default function Home() {
   const [brief, setBrief] = useState<OfferBrief | null>(null);
   const [angles, setAngles] = useState<Angle[] | null>(null);
   const [copy, setCopy] = useState<AdCopy[] | null>(null);
+  const [verdicts, setVerdicts] = useState<ComplianceVerdict[] | null>(null);
+  const [complianceSummary, setComplianceSummary] = useState<ComplianceSummary | null>(null);
+  const [ruleCount, setRuleCount] = useState<number | null>(null);
   const [researchMeta, setResearchMeta] = useState<RunMeta | null>(null);
   const [anglesMeta, setAnglesMeta] = useState<RunMeta | null>(null);
   const [copyMeta, setCopyMeta] = useState<RunMeta | null>(null);
@@ -44,13 +60,20 @@ export default function Home() {
   const [advertorialLoading, setAdvertorialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function clearCopyAndDownstream() {
+    setCopy(null);
+    setCopyMeta(null);
+    setVerdicts(null);
+    setComplianceSummary(null);
+    setRuleCount(null);
+  }
+
   function reset() {
     setBrief(null);
     setAngles(null);
-    setCopy(null);
+    clearCopyAndDownstream();
     setResearchMeta(null);
     setAnglesMeta(null);
-    setCopyMeta(null);
     setAdvertorialUrl(null);
     setAdvertorialMeta(null);
     setAdvertorialAngleId("");
@@ -83,8 +106,7 @@ export default function Home() {
     setAnglesLoading(true);
     setError(null);
     // Regenerating angles invalidates any copy/advertorial made for the old set.
-    setCopy(null);
-    setCopyMeta(null);
+    clearCopyAndDownstream();
     setAdvertorialUrl(null);
     setAdvertorialMeta(null);
     setAdvertorialAngleId("");
@@ -145,10 +167,30 @@ export default function Home() {
       setCopy(data.copy);
       // The copy stage returns one meta per platform; surface the first for the tag.
       setCopyMeta(Array.isArray(data.meta) ? data.meta[0] : data.meta);
+      // Inline QA gate: score the fresh copy immediately (deterministic + instant).
+      await runCompliance(data.copy);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setCopyLoading(false);
+    }
+  }
+
+  async function runCompliance(copyToScore: AdCopy[]) {
+    try {
+      const res = await fetch("/api/compliance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ copy: copyToScore }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Compliance scoring failed.");
+      setVerdicts(data.verdicts);
+      setComplianceSummary(data.summary);
+      setRuleCount(data.ruleCount);
+    } catch (e) {
+      // The gate is non-blocking for the pipeline: if it fails, copy still shows.
+      setError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -292,28 +334,61 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Step 4 — the per-platform copy */}
+      {/* Step 4 — the per-platform copy, each ad scored by the inline compliance gate */}
       {copy && copy.length > 0 && angles && (
         <Card step={4} title={`Ad copy (${copy.length})`}>
+          {complianceSummary && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-neutral-500/15 bg-neutral-500/5 px-3 py-2 text-xs">
+              <span className="font-semibold uppercase tracking-wide text-neutral-500">Compliance gate</span>
+              <VerdictPill status="pass" count={complianceSummary.pass} />
+              <VerdictPill status="flag" count={complianceSummary.flag} />
+              <VerdictPill status="block" count={complianceSummary.block} />
+              {ruleCount != null && (
+                <span className="ml-auto text-neutral-400">{ruleCount} rules · Meta/Taboola/Google/TikTok + FTC</span>
+              )}
+            </div>
+          )}
           {groupByPlatform(copy).map(([platform, items]) => (
             <div key={platform} className="mt-2 first:mt-0">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 {PLATFORM_LABELS[platform] ?? platform}
               </h3>
               <div className="grid gap-3 sm:grid-cols-2">
-                {items.map((c, i) => (
-                  <div key={`${c.angleId}-${i}`} className="flex flex-col rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
-                    <span className="mb-2 self-start rounded-full bg-neutral-500/15 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
-                      {hookFor(angles, c.angleId)}
-                    </span>
-                    <p className="text-sm font-semibold leading-snug">{c.headline}</p>
-                    <p className="mt-1 flex-1 text-sm text-neutral-600 dark:text-neutral-300">{c.primaryText}</p>
-                    {c.description && <p className="mt-1 text-xs text-neutral-500">{c.description}</p>}
-                    <span className="mt-3 self-start rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-white dark:text-neutral-900">
-                      {c.cta}
-                    </span>
-                  </div>
-                ))}
+                {items.map((c, i) => {
+                  const verdict = verdictFor(verdicts, c);
+                  return (
+                    <div key={`${c.angleId}-${i}`} className="flex flex-col rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="rounded-full bg-neutral-500/15 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
+                          {hookFor(angles, c.angleId)}
+                        </span>
+                        {verdict && (
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[verdict.status]}`}>
+                            {verdict.status}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold leading-snug">{c.headline}</p>
+                      <p className="mt-1 flex-1 text-sm text-neutral-600 dark:text-neutral-300">{c.primaryText}</p>
+                      {c.description && <p className="mt-1 text-xs text-neutral-500">{c.description}</p>}
+                      <span className="mt-3 self-start rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-white dark:text-neutral-900">
+                        {c.cta}
+                      </span>
+                      {verdict && verdict.violations.length > 0 && (
+                        <ul className="mt-3 space-y-1.5 border-t border-neutral-500/15 pt-2.5">
+                          {verdict.violations.map((v, vi) => (
+                            <li key={vi} className="text-[11px] leading-snug">
+                              <span className={`font-semibold ${v.severity === "block" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400"}`}>
+                                {v.severity}
+                              </span>
+                              <span className="text-neutral-500"> · “{v.offendingText}” — {v.fix}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -390,6 +465,19 @@ function groupByPlatform(copy: AdCopy[]): [Platform, AdCopy[]][] {
 /** Look up the hook type of the angle a piece of copy was written for. */
 function hookFor(angles: Angle[], angleId: string): string {
   return angles.find((a) => a.id === angleId)?.hookType ?? "angle";
+}
+
+/** Match a compliance verdict to its ad by (angleId, platform). */
+function verdictFor(verdicts: ComplianceVerdict[] | null, c: AdCopy): ComplianceVerdict | undefined {
+  return verdicts?.find((v) => v.angleId === c.angleId && v.platform === c.platform);
+}
+
+function VerdictPill({ status, count }: { status: ComplianceVerdict["status"]; count: number }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 font-semibold ring-1 ring-inset ${VERDICT_STYLES[status]}`}>
+      {count} {status}
+    </span>
+  );
 }
 
 /* --- small presentational components --- */

@@ -141,6 +141,23 @@ export function toPlatform(raw: unknown): Platform {
   return asEnum(raw, ["meta", "taboola", "google", "tiktok"] as const, "meta");
 }
 
+/** Coerce an arbitrary (e.g. replayed / network) list into typed AdCopy[].
+ *  Used by the compliance route so it can score copy without trusting shape. */
+export function coerceAdCopyList(raw: unknown): AdCopy[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.map((item, i) => {
+    const c = asRecord(item);
+    return {
+      angleId: asString(c.angleId) || `angle-${i + 1}`,
+      platform: toPlatform(c.platform),
+      primaryText: asString(c.primaryText),
+      headline: asString(c.headline),
+      description: asString(c.description),
+      cta: asString(c.cta),
+    };
+  });
+}
+
 async function copyForPlatform(platform: Platform, brief: OfferBrief, angles: Angle[]) {
   return generateJson<AdCopy[]>(
     [
