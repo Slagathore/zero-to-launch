@@ -34,10 +34,14 @@ export default function Home() {
   const [researchMeta, setResearchMeta] = useState<RunMeta | null>(null);
   const [anglesMeta, setAnglesMeta] = useState<RunMeta | null>(null);
   const [copyMeta, setCopyMeta] = useState<RunMeta | null>(null);
+  const [advertorialUrl, setAdvertorialUrl] = useState<string | null>(null);
+  const [advertorialMeta, setAdvertorialMeta] = useState<RunMeta | null>(null);
+  const [advertorialAngleId, setAdvertorialAngleId] = useState<string>("");
 
   const [researchLoading, setResearchLoading] = useState(false);
   const [anglesLoading, setAnglesLoading] = useState(false);
   const [copyLoading, setCopyLoading] = useState(false);
+  const [advertorialLoading, setAdvertorialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reset() {
@@ -47,6 +51,9 @@ export default function Home() {
     setResearchMeta(null);
     setAnglesMeta(null);
     setCopyMeta(null);
+    setAdvertorialUrl(null);
+    setAdvertorialMeta(null);
+    setAdvertorialAngleId("");
     setError(null);
   }
 
@@ -75,9 +82,12 @@ export default function Home() {
     if (!brief) return;
     setAnglesLoading(true);
     setError(null);
-    // Regenerating angles invalidates any copy written for the old set.
+    // Regenerating angles invalidates any copy/advertorial made for the old set.
     setCopy(null);
     setCopyMeta(null);
+    setAdvertorialUrl(null);
+    setAdvertorialMeta(null);
+    setAdvertorialAngleId("");
     try {
       const res = await fetch("/api/angles", {
         method: "POST",
@@ -88,10 +98,35 @@ export default function Home() {
       if (!data.ok) throw new Error(data.error || "Angle generation failed.");
       setAngles(data.angles);
       setAnglesMeta(data.meta);
+      // Default the advertorial to the first (top) angle.
+      if (data.angles?.[0]?.id) setAdvertorialAngleId(data.angles[0].id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setAnglesLoading(false);
+    }
+  }
+
+  async function runAdvertorial() {
+    if (!brief || !angles) return;
+    const angle = angles.find((a) => a.id === advertorialAngleId) ?? angles[0];
+    if (!angle) return;
+    setAdvertorialLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/advertorial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief, angle }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Advertorial generation failed.");
+      setAdvertorialUrl(data.url);
+      setAdvertorialMeta(data.meta);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAdvertorialLoading(false);
     }
   }
 
@@ -282,6 +317,52 @@ export default function Home() {
               </div>
             </div>
           ))}
+        </Card>
+      )}
+
+      {/* Step 5 — the live advertorial pre-lander */}
+      {angles && angles.length > 0 && (
+        <Card step={5} title="Advertorial pre-lander">
+          <p className="mb-3 text-sm text-neutral-500">
+            Develop one angle into a full, FTC-labeled advertorial — served live on this site.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={advertorialAngleId}
+              onChange={(e) => setAdvertorialAngleId(e.target.value)}
+              className="rounded-lg border border-neutral-500/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500/50"
+            >
+              {angles.map((a) => (
+                <option key={a.id} value={a.id}>
+                  [{a.hookType}] {a.headlineSeed}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={runAdvertorial}
+              disabled={advertorialLoading}
+              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              {advertorialLoading ? "Writing advertorial…" : "Generate advertorial"}
+            </button>
+            {advertorialMeta && <MetaTag meta={advertorialMeta} />}
+          </div>
+
+          {advertorialUrl && (
+            <a
+              href={advertorialUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 transition hover:bg-emerald-500/15"
+            >
+              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                Live advertorial ready — click to open the real page
+              </span>
+              <span className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
+                Open ↗
+              </span>
+            </a>
+          )}
         </Card>
       )}
     </main>
