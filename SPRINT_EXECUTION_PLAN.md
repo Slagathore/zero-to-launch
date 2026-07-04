@@ -261,22 +261,23 @@ Judge uses a distinct stronger model (route via `dependencies/llmroute`).
 - `dependencies/agentgateway` (optional) or plain SSE for streaming `/api/run`.
 
 **Deliverables:**
-- [ ] `agents/judge.ts` — full state → ranked recommendation + "why" (top-N by compliance-pass +
-      angle diversity as heuristic fallback per build-plan §10).
-- [ ] `agents/orchestrator.ts` + `app/api/run/route.ts` — streamed, stage-by-stage end-to-end run.
-- [ ] `examples/seeded-run.json` — a cached full run so the demo **never** cold-fails; UI falls back
-      to it silently on any live-call failure (build-plan §8 anti-fail rules).
-- [ ] **Public exposure via cloudflared** (decided S1): the LLM provider is the developer's
-      self-hosted Ollama at `localhost:11434`, unreachable from Vercel. Create a cloudflared tunnel
-      fronting Ollama via CLI, set `OPENAI_COMPAT_URL` to the tunnel URL as a Vercel env var, and
-      write a **single unified startup script** that brings the tunnel up *before* the app and runs
-      them as one fluid start (mirrors the developer's DungeonMaster app). This is what makes the
-      Vercel URL a real clickable live demo.
-- [ ] Harden every build-plan §7 failure mode: bad URLs, empty offers, API timeout → seeded
-      fallback.
-- [ ] `README.md` — answer the three scored questions in build-plan §9, **in the human's voice**
-      (leave voice/tone final pass flagged for the human if needed — but ship a complete draft).
-- [ ] Final deploy; **submit a working version.**
+- [x] `agents/judge.ts` — deterministic scorer (compliance + completeness + reach) ranks + selects
+      the launch set (never a BLOCK unless nothing cleaner); model rationale w/ templated fallback;
+      dynamic checklist. `app/api/judge`.
+- [x] `agents/orchestrator.ts` (+ jsdom-free `orchestrator-core.ts`) + `app/api/run` — SSE streamed,
+      stage-by-stage run with a seeded fallback. Verified live end-to-end.
+- [x] `examples/seeded-run.json` — a **real** cached full run (FlowDesk). UI falls back to it; the
+      `/api/run` route replays it whenever the live pipeline can't reach the model — so it works on
+      the public URL too. Its advertorial is committed so its `/p/` link resolves publicly.
+- [x] **Public exposure via cloudflared** — `scripts/start-live.mjs` + `npm run live`: tunnel-then-app
+      unified startup fronting the local app (which reaches local Ollama), per the S1 decision.
+- [x] Harden every build-plan §7 failure mode: bad URL, empty offer, no-model → seeded fallback (all
+      verified live). Bonus: fixed a real Vercel 500 (jsdom static-import → lazy-import).
+- [x] `README.md` — answers build-plan §9's three scored questions + architecture + running it.
+      Complete draft; **human should do a final voice pass** (§9 stresses "your voice").
+- [x] Final deploy (L4 live + verified on the public URL). Submission = the user's action; the
+      submittable state is shipped.
+- [ ] Adversarial ultracode verification pass — running; findings applied before final sign-off.
 
 **Tests:** full-pipeline integration test (paste → run → launch package); fault-injection tests
 proving each failure mode falls back to `seeded-run.json`; judge produces a stable ranking +
