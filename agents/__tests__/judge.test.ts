@@ -115,9 +115,13 @@ describe("heuristicRationale", () => {
 
 describe("judge() end-to-end (heuristic path, no model)", () => {
   it("assembles a LaunchPackage with recommended angles, their copy, and a rationale", async () => {
-    // Force the model path to fail fast so we exercise the heuristic fallback.
+    // Force the model path to fail fast so we exercise the heuristic fallback:
+    // clear every provider (native Ollama, openai-compat, and Anthropic) so the
+    // chain is empty and modelRationale falls back.
+    const prevBase = process.env.OLLAMA_BASE_URL;
     const prevUrl = process.env.OPENAI_COMPAT_URL;
     const prevKey = process.env.ANTHROPIC_API_KEY;
+    process.env.OLLAMA_BASE_URL = "";
     process.env.OPENAI_COMPAT_URL = "";
     process.env.ANTHROPIC_API_KEY = "";
     try {
@@ -134,6 +138,7 @@ describe("judge() end-to-end (heuristic path, no model)", () => {
       expect(result.launchPackage.copy.every((c) => recIds.has(c.angleId))).toBe(true);
       expect(result.launchPackage.checklist.length).toBeGreaterThan(3);
     } finally {
+      process.env.OLLAMA_BASE_URL = prevBase;
       process.env.OPENAI_COMPAT_URL = prevUrl;
       process.env.ANTHROPIC_API_KEY = prevKey;
     }

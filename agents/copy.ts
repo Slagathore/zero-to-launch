@@ -205,10 +205,12 @@ export interface CopyOutput {
 }
 
 /**
- * Generate per-platform ad copy for a set of angles. Platforms run
- * sequentially (a single local Ollama proxying to the cloud serializes work
- * anyway, and it keeps token bursts bounded) and resiliently (a failing
- * platform degrades to partial results). Throws only if EVERY platform failed.
+ * Generate per-platform ad copy for a set of angles. Platforms run CONCURRENTLY
+ * (they're independent, and the cloud model handles parallel calls fine), so
+ * the copy stage takes about as long as its slowest single platform instead of
+ * the sum. Each platform is resilient (retry, then degrade to partial) — throws
+ * only if EVERY platform failed. Results are ordered by the `platforms` array,
+ * not by which finished first, so output is deterministic.
  */
 export async function copy(
   brief: OfferBrief,
@@ -216,17 +218,19 @@ export async function copy(
   platforms: Platform[] = COPY_PLATFORMS,
 ): Promise<CopyOutput> {
   const forCopy = angles.slice(0, MAX_ANGLES_FOR_COPY);
+  const results = await Promise.all(
+    platforms.map((platform) => copyForPlatformResilient(platform, brief, forCopy)),
+  );
+
   const all: AdCopy[] = [];
   const meta: GenerateResult[] = [];
   const failedPlatforms: string[] = [];
-
-  for (const platform of platforms) {
-    const { copy: c, meta: m, error } = await copyForPlatformResilient(platform, brief, forCopy);
+  for (const { copy: c, meta: m, error } of results) {
     if (c.length > 0) {
       all.push(...c);
       if (m) meta.push(m);
-    } else {
-      failedPlatforms.push(error ?? platform);
+    } else if (error) {
+      failedPlatforms.push(error);
     }
   }
 

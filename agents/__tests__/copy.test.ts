@@ -73,9 +73,9 @@ const BRIEF: OfferBrief = {
   usps: [], claimsDetected: [], complianceRisk: "low", notes: "",
 };
 
-/** Mock an openai-compat chat response carrying `content`. */
+/** Mock an Ollama native /api/chat response carrying `content` (the default transport). */
 function okOpenAI(content: string): Response {
-  return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) } as unknown as Response;
+  return { ok: true, json: async () => ({ message: { content } }) } as unknown as Response;
 }
 const GOOD_COPY = '{"copy":[{"angleId":"angle-1","headline":"H","primaryText":"b","description":"d","cta":"Shop Now"}]}';
 
