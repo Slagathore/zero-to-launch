@@ -277,7 +277,13 @@ Judge uses a distinct stronger model (route via `dependencies/llmroute`).
       Complete draft; **human should do a final voice pass** (§9 stresses "your voice").
 - [x] Final deploy (L4 live + verified on the public URL). Submission = the user's action; the
       submittable state is shipped.
-- [ ] Adversarial ultracode verification pass — running; findings applied before final sign-off.
+- [x] Adversarial verification pass (workflow: 6 finders → 3 skeptics each, 48 agents) — **14
+      findings, all confirmed 3/3, all applied + tested** (124 tests). Key: a copy-less-angle judge
+      bug, SSRF on the offer fetch, a jsdom-500 on `/api/research`, and JSON-repair string
+      corruption (fixed here + ported to the standalone `dependencies/planjson`).
+- [x] **Stable public subdomain** (beyond the plan): `https://aideas4ads.cognima.net` via a named
+      cloudflared tunnel (http2, SSE-heartbeat) — the full live pipeline runs through it. Plus a
+      run-progress loading UI (stage tracker + ETA).
 
 **Tests:** full-pipeline integration test (paste → run → launch package); fault-injection tests
 proving each failure mode falls back to `seeded-run.json`; judge produces a stable ranking +
@@ -404,6 +410,34 @@ complete, and a working version is **submitted**.
   **deviations from build plan:** gate scores COPY (not "angles→copy"); the build plan's L3 line
   says "between angles→copy" but the contract + file tree are copy-scoring, so verdicts attach to
   ads. Covers Google/TikTok too (build plan minimum was Meta+Taboola+FTC).
+
+- **Sprint 5 (Opus 4.8 high — see deviation) — 2026-07-03/04** ·
+  **shipped:** L4 + hardening + a stable public deploy. `agents/judge.ts` (deterministic scorer →
+  launch set + rationale + checklist), `agents/orchestrator.ts` (+ jsdom-free `orchestrator-core`),
+  `app/api/run` (SSE stream + seeded fallback + 15s heartbeat), `app/api/judge`, UI Run-all + Step-6
+  Judge card + a **run-progress loading UI** (stage tracker, elapsed, ETA), `examples/seeded-run.json`
+  (+ its committed advertorial), `scripts/start-live.mjs` + `npm run live`, README, `cloudflared.yml`.
+  Then an **adversarial verification workflow** (48 agents) found **14 real bugs**, all fixed +
+  tested (**124 tests**). ·
+  **lives in:** `agents/{judge,orchestrator,orchestrator-core}.ts`, `app/api/{run,judge}`,
+  `app/p/[slug]`, `app/page.tsx`, `lib/{seededRun}.ts`, `scripts/start-live.mjs`, `cloudflared.yml`. ·
+  **live URLs:** Vercel shell (always-on, seeded/deterministic demos):
+  https://marketingapp-ashy.vercel.app · **full live pipeline (operator's machine + Ollama):**
+  https://aideas4ads.cognima.net (named cloudflared tunnel, `npm run live`). ·
+  **next model must know:** (1) **Two hosts, on purpose:** Vercel = always-on shell where the
+  seeded run + advertorials + compliance + judge work with no backend; the cloudflared subdomain =
+  the full LIVE pipeline (needs this machine running `npm run live` + Ollama). (2) **cloudflared
+  MUST use `protocol: http2`** — QUIC/UDP is blocked by the VPN; and SSE needs the 15s heartbeat in
+  `/api/run` or Cloudflare's ~100s idle timeout cuts long runs. (3) **Deterministic stages
+  (compliance, judge) run with no model** — reuse for anything that must work on the public URL.
+  (4) The `planjson` JSON-repair fix was ported upstream to `dependencies/planjson` (rebuild/publish
+  if other apps consume it). (5) SSRF guard + LLM fetch timeouts are in — keep new fetches guarded.
+  (6) The seeded run is the un-killable-demo backbone; regenerate it (live `/api/run`, save the
+  RunResult + copy its advertorial into `examples/advertorials/`) if the pipeline shape changes. ·
+  **deviations from build plan:** **run on Opus, not the plan's Fable xHigh + ultracode** — decided
+  jointly (S5 is coupled engineering, not creative; ultracode used only for the verification
+  workflow). Added a stable subdomain + loading UI beyond the plan. README needs a final human
+  voice pass (build plan §9). Contest submission itself is the user's action.
 
 ---
 
