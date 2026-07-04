@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   // ships without them and /p/[slug] 404s on the deployed URL.
   outputFileTracingIncludes: {
     "/p/[slug]": ["./examples/advertorials/**/*"],
+    // The seeded-run fallback reads this at request time; include it in the
+    // /api/run lambda bundle so the un-killable demo works on the public URL.
+    "/api/run": ["./examples/seeded-run.json"],
   },
 };
 

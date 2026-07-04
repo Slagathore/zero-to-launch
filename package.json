@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "live": "node scripts/start-live.mjs",
     "lint": "eslint",
     "test": "vitest run"
   },

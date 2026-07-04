@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { OfferBrief, Angle, AdCopy, Platform, ComplianceVerdict } from "@/agents/types";
+import type { JudgeResult } from "@/agents/judge";
 import { EXAMPLE_OFFERS } from "@/lib/examples";
 
 /**
@@ -36,6 +37,36 @@ const RISK_STYLES: Record<OfferBrief["complianceRisk"], string> = {
   high: "bg-rose-500/15 text-rose-600 dark:text-rose-400 ring-rose-500/30",
 };
 
+/** The RunResult shape /api/run streams (subset the client reads). */
+interface RunResultLike {
+  brief: OfferBrief;
+  angles: Angle[];
+  copy: AdCopy[];
+  verdicts: ComplianceVerdict[];
+  advertorialUrl: string;
+  advertorialSlug: string;
+  judge: JudgeResult;
+}
+
+type RunEvent =
+  | { type: "info"; seeded?: boolean; message: string }
+  | { type: "fatal"; error: string }
+  | { type: "progress"; seeded?: boolean; event: { stage: string; status: "start" | "done" | "error"; data?: unknown; error?: string } }
+  | { type: "complete"; seeded?: boolean; result: RunResultLike };
+
+const RUN_STAGES = ["research", "angles", "copy", "compliance", "advertorial", "judge"] as const;
+
+function nextStage(stage: string): string | null {
+  const i = RUN_STAGES.indexOf(stage as (typeof RUN_STAGES)[number]);
+  return i >= 0 && i < RUN_STAGES.length - 1 ? RUN_STAGES[i + 1] : null;
+}
+
+function summarizeVerdicts(verdicts: ComplianceVerdict[]): ComplianceSummary {
+  const s: ComplianceSummary = { total: verdicts.length, pass: 0, flag: 0, block: 0 };
+  for (const v of verdicts) s[v.status] += 1;
+  return s;
+}
+
 export default function Home() {
   const [mode, setMode] = useState<"text" | "url">("text");
   const [url, setUrl] = useState("");
@@ -53,11 +84,15 @@ export default function Home() {
   const [advertorialUrl, setAdvertorialUrl] = useState<string | null>(null);
   const [advertorialMeta, setAdvertorialMeta] = useState<RunMeta | null>(null);
   const [advertorialAngleId, setAdvertorialAngleId] = useState<string>("");
+  const [judgeResult, setJudgeResult] = useState<JudgeResult | null>(null);
 
   const [researchLoading, setResearchLoading] = useState(false);
   const [anglesLoading, setAnglesLoading] = useState(false);
   const [copyLoading, setCopyLoading] = useState(false);
   const [advertorialLoading, setAdvertorialLoading] = useState(false);
+  const [running, setRunning] = useState(false); // the one-click orchestrated run
+  const [runStage, setRunStage] = useState<string | null>(null);
+  const [seeded, setSeeded] = useState(false); // whether the shown run is the cached demo
   const [error, setError] = useState<string | null>(null);
 
   function clearCopyAndDownstream() {
@@ -77,7 +112,97 @@ export default function Home() {
     setAdvertorialUrl(null);
     setAdvertorialMeta(null);
     setAdvertorialAngleId("");
+    setJudgeResult(null);
+    setSeeded(false);
     setError(null);
+  }
+
+  /** One-click orchestrated run: stream /api/run (SSE) and fill each stage as
+   *  it lands. Falls back to the cached demo run automatically (server-side)
+   *  when the live pipeline can't reach the model. */
+  async function runAll(payload: { url?: string; text?: string; seeded?: boolean }) {
+    reset();
+    setRunning(true);
+    setRunStage("research");
+    try {
+      const res = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.body) throw new Error("No response stream.");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const dataLine = part.split("\n").find((l) => l.startsWith("data:"));
+          if (!dataLine) continue;
+          handleRunEvent(JSON.parse(dataLine.slice(5).trim()));
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+      setRunStage(null);
+    }
+  }
+
+  function handleRunEvent(ev: RunEvent) {
+    if (ev.type === "info") {
+      if (ev.seeded) setSeeded(true);
+      return;
+    }
+    if (ev.type === "fatal") {
+      setError(ev.error);
+      return;
+    }
+    if (ev.type === "progress" && ev.event.status === "done") {
+      if (ev.seeded) setSeeded(true);
+      applyStage(ev.event.stage, ev.event.data);
+      setRunStage(nextStage(ev.event.stage));
+    }
+    if (ev.type === "complete") {
+      if (ev.seeded) setSeeded(true);
+      // The complete payload carries the whole RunResult — trust it as the
+      // final source of truth (covers any event we might have missed).
+      const r = ev.result;
+      setBrief(r.brief);
+      setAngles(r.angles);
+      setCopy(r.copy);
+      setVerdicts(r.verdicts);
+      setComplianceSummary(summarizeVerdicts(r.verdicts));
+      setAdvertorialUrl(r.advertorialUrl);
+      setJudgeResult(r.judge);
+      if (r.angles[0]?.id) setAdvertorialAngleId(r.angles[0].id);
+    }
+  }
+
+  function applyStage(stage: string, data: unknown) {
+    switch (stage) {
+      case "research": setBrief(data as OfferBrief); break;
+      case "angles": {
+        const a = data as Angle[];
+        setAngles(a);
+        if (a[0]?.id) setAdvertorialAngleId(a[0].id);
+        break;
+      }
+      case "copy": setCopy(data as AdCopy[]); break;
+      case "compliance": {
+        const v = data as ComplianceVerdict[];
+        setVerdicts(v);
+        setComplianceSummary(summarizeVerdicts(v));
+        break;
+      }
+      case "advertorial": setAdvertorialUrl((data as { url: string }).url); break;
+      case "judge": setJudgeResult(data as JudgeResult); break;
+    }
   }
 
   async function runResearch() {
@@ -246,17 +371,38 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => runAll(mode === "url" ? { url } : { text })}
+            disabled={!canRun || running}
+            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          >
+            {running ? `Running… ${runStage ?? ""}` : "▶ Run full pipeline"}
+          </button>
           <button
             onClick={runResearch}
-            disabled={!canRun || researchLoading}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            disabled={!canRun || researchLoading || running}
+            className="rounded-lg border border-neutral-500/30 px-4 py-2 text-sm font-medium transition hover:border-neutral-500/60 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {researchLoading ? "Analyzing…" : "Analyze offer"}
+            {researchLoading ? "Analyzing…" : "Step through manually"}
+          </button>
+          <button
+            onClick={() => runAll({ seeded: true })}
+            disabled={running}
+            className="text-xs text-neutral-500 underline underline-offset-2 transition hover:text-neutral-800 disabled:opacity-40 dark:hover:text-neutral-200"
+          >
+            watch a cached demo run
           </button>
           {researchMeta && <MetaTag meta={researchMeta} />}
         </div>
       </Card>
+
+      {seeded && (
+        <div className="mt-4 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-xs text-sky-700 dark:text-sky-300">
+          Showing a <strong>cached demo run</strong> — the live model wasn’t reachable from here (it runs on the operator’s
+          machine). Every stage below is a real, previously-generated pipeline output.
+        </div>
+      )}
 
       {error && (
         <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-600 dark:text-rose-400">
@@ -436,6 +582,49 @@ export default function Home() {
               <span className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
                 Open ↗
               </span>
+            </a>
+          )}
+        </Card>
+      )}
+
+      {/* Step 6 — the Judge's ranked recommendation + launch package */}
+      {judgeResult && (
+        <Card step={6} title="Recommended launch set">
+          <div className="rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+              Why these angles {judgeResult.rationaleSource === "heuristic" && <span className="text-neutral-400">(heuristic)</span>}
+            </p>
+            <p className="mt-1 text-sm text-neutral-700 dark:text-neutral-200">{judgeResult.rationale}</p>
+          </div>
+
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">Ranking</p>
+            <ol className="space-y-1.5">
+              {judgeResult.ranking.map((r, i) => {
+                const picked = judgeResult.launchPackage.recommendedAngles.some((a) => a.id === r.angleId);
+                return (
+                  <li key={r.angleId} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${picked ? "bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/25" : "bg-neutral-500/5"}`}>
+                    <span className="w-5 shrink-0 text-xs font-semibold text-neutral-400">{i + 1}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[r.worstStatus]}`}>{r.worstStatus}</span>
+                    <span className="flex-1 truncate">{r.headlineSeed}</span>
+                    <span className="shrink-0 text-[11px] text-neutral-500">{r.hookType} · {r.score}</span>
+                    {picked && <span className="shrink-0 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">LAUNCH</span>}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+
+          <ListField label="Launch checklist" items={judgeResult.launchPackage.checklist} />
+
+          {judgeResult.launchPackage.advertorialUrl && (
+            <a
+              href={judgeResult.launchPackage.advertorialUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              Open the recommended advertorial ↗
             </a>
           )}
         </Card>

@@ -94,7 +94,8 @@ export interface AnglesOutput {
  */
 export async function angles(brief: OfferBrief): Promise<AnglesOutput> {
   let lastError = "";
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  const ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     try {
       const { value, meta } = await generateJson<Angle[]>(
         [
@@ -102,8 +103,10 @@ export async function angles(brief: OfferBrief): Promise<AnglesOutput> {
           { role: "user", content: buildUserMessage(brief) },
         ],
         coerceAngles,
-        // Higher temperature than research: we WANT creative spread here.
-        { temperature: 0.8, maxTokens: 5000 },
+        // Higher temperature than research (we WANT creative spread), and a big
+        // token budget: kimi-k2.6:cloud "thinks" before emitting the JSON, and
+        // 6 angles is enough output that a tight cap truncates it mid-array.
+        { temperature: 0.8, maxTokens: 8000 },
       );
       if (value.length > 0) return { angles: value, meta };
       lastError = "swarm returned no usable angles";
@@ -111,5 +114,5 @@ export async function angles(brief: OfferBrief): Promise<AnglesOutput> {
       lastError = e instanceof Error ? e.message : String(e);
     }
   }
-  throw new Error(`Angle generation failed after 2 attempts: ${lastError}`);
+  throw new Error(`Angle generation failed after ${ATTEMPTS} attempts: ${lastError}`);
 }
