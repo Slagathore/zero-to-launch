@@ -1,4 +1,3 @@
-import type { AdCopy, Angle, ComplianceVerdict, OfferBrief } from "@/agents/types";
 import { getOffer } from "@/lib/fetchOffer";
 import { research } from "@/agents/research";
 import { angles as generateAngles } from "@/agents/angles";
@@ -6,7 +5,14 @@ import { copy as generateCopy } from "@/agents/copy";
 import { compliance } from "@/agents/compliance";
 import { generateAdvertorial } from "@/agents/advertorial";
 import { saveAdvertorial } from "@/lib/advertorialStore";
-import { rankAngles, judge, type JudgeResult } from "@/agents/judge";
+import { rankAngles, judge } from "@/agents/judge";
+import { type ProgressFn, type RunInput, type RunResult, type Stage } from "@/agents/orchestrator-core";
+
+// Re-export the jsdom-free core so existing importers keep one entry point.
+// (Routes that only need the light helpers should import orchestrator-core
+// directly — see that file's header for why.)
+export { STAGES, stageDataFromResult } from "@/agents/orchestrator-core";
+export type { Stage, ProgressEvent, ProgressFn, RunInput, RunResult } from "@/agents/orchestrator-core";
 
 /**
  * Orchestrator (ZERO_TO_LAUNCH_BUILD_PLAN.md §2, L4) — chains the six agents
@@ -21,52 +27,13 @@ import { rankAngles, judge, type JudgeResult } from "@/agents/judge";
  * The generation agents already retry internally; a hard failure here
  * propagates to the caller, which decides whether to fall back to the seeded
  * run (the un-killable-demo path).
+ *
+ * NOTE: this module transitively imports jsdom (via lib/fetchOffer) and must
+ * only be imported where that's safe — lazy-import it on the live branch of a
+ * route, never at a route's top level (see agents/orchestrator-core.ts).
  */
 
-export type Stage = "research" | "angles" | "copy" | "compliance" | "advertorial" | "judge";
-
-export const STAGES: Stage[] = ["research", "angles", "copy", "compliance", "advertorial", "judge"];
-
-export interface ProgressEvent {
-  stage: Stage;
-  status: "start" | "done" | "error";
-  /** Stage output on `done` (shape depends on stage). */
-  data?: unknown;
-  error?: string;
-}
-
-export type ProgressFn = (e: ProgressEvent) => void | Promise<void>;
-
-export interface RunInput {
-  url?: string;
-  text?: string;
-}
-
-export interface RunResult {
-  brief: OfferBrief;
-  angles: Angle[];
-  copy: AdCopy[];
-  verdicts: ComplianceVerdict[];
-  advertorialSlug: string;
-  advertorialUrl: string;
-  judge: JudgeResult;
-}
-
 const noop: ProgressFn = () => {};
-
-/** Derive a stage's `done` payload from a completed RunResult — lets the
- *  seeded-run fallback replay a cached run through the same event shape the
- *  live pipeline emits (keeps /api/run's two paths identical for the UI). */
-export function stageDataFromResult(r: RunResult, stage: Stage): unknown {
-  switch (stage) {
-    case "research": return r.brief;
-    case "angles": return r.angles;
-    case "copy": return r.copy;
-    case "compliance": return r.verdicts;
-    case "advertorial": return { slug: r.advertorialSlug, url: r.advertorialUrl };
-    case "judge": return r.judge;
-  }
-}
 
 /** Run the full pipeline, emitting progress. Throws on a stage that can't
  *  recover (the route turns that into a seeded-run fallback). */

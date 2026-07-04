@@ -1,5 +1,10 @@
-import { runPipeline, STAGES, stageDataFromResult, type RunResult } from "@/agents/orchestrator";
+import { STAGES, stageDataFromResult, type RunResult } from "@/agents/orchestrator-core";
 import { loadSeededRun } from "@/lib/seededRun";
+
+// The live pipeline (agents/orchestrator) transitively imports jsdom, which
+// crashes at module load in Vercel's serverless runtime. Import it lazily so
+// the seeded/no-offer paths — the only ones that run on the public deploy —
+// never load jsdom. See agents/orchestrator-core.ts.
 
 /**
  * POST /api/run — { url?, text?, seeded? } -> Server-Sent Events stream.
@@ -49,6 +54,7 @@ export async function POST(req: Request) {
         } else if (!body.url && !body.text) {
           await replaySeeded("No offer provided — showing a cached demo run.");
         } else {
+          const { runPipeline } = await import("@/agents/orchestrator");
           const result: RunResult = await runPipeline(
             { url: body.url, text: body.text },
             (event) => send({ type: "progress", event }),

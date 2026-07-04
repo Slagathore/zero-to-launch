@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { STAGES, stageDataFromResult, type RunResult } from "../orchestrator";
+import { STAGES, stageDataFromResult, type RunResult } from "../orchestrator-core";
 
 const result: RunResult = {
   brief: { url: "https://x", vertical: "v", product: "P", audience: { who: "", painPoints: [], desires: [] }, usps: [], claimsDetected: [], complianceRisk: "low", notes: "" },
