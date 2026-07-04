@@ -33,7 +33,25 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      let closed = false;
+      const send = (obj: unknown) => {
+        if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      };
+
+      // SSE heartbeat: a comment line every 15s so the connection never goes
+      // idle. The generation stages (copy, advertorial) run the thinking model
+      // for 60-120s with no events in between; without this, a proxy in front
+      // of the app (Cloudflare's ~100s idle timeout) cuts the stream mid-run.
+      // Comment lines (": ...") are ignored by the client's data-only parser.
+      const heartbeat = setInterval(() => {
+        if (!closed) {
+          try {
+            controller.enqueue(encoder.encode(`: ping ${Date.now()}\n\n`));
+          } catch {
+            /* controller already closed */
+          }
+        }
+      }, 15_000);
 
       async function replaySeeded(reason: string) {
         const seed = await loadSeededRun();
@@ -66,6 +84,8 @@ export async function POST(req: Request) {
         // Live run failed mid-flight — fall back to the cached run so the demo holds.
         await replaySeeded(`Live run unavailable (${reason.slice(0, 140)}) — showing a cached demo run.`);
       } finally {
+        clearInterval(heartbeat);
+        closed = true;
         controller.close();
       }
     },

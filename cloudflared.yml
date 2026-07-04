@@ -1,0 +1,39 @@
+# Zero-to-Launch — Cloudflare Tunnel config (named tunnel: aideas4ads)
+#
+# Serves the local app at a STABLE public URL: https://aideas4ads.cognima.net
+# Mirrors the DungeonMaster setup. Run via `npm run live` (scripts/start-live.mjs)
+# which brings this tunnel up BEFORE the app, or directly with:
+#
+#   cloudflared tunnel --config cloudflared.yml run
+#
+# ── ONE-TIME SETUP (already done on this machine) ────────────────────────────
+#   cloudflared tunnel login                                  # browser, authorizes cognima.net
+#   cloudflared tunnel create aideas4ads                      # -> UUID + credentials JSON
+#   cloudflared tunnel route dns aideas4ads aideas4ads.cognima.net   # -> CNAME
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Tunnel: aideas4ads (created 2026-07-04)
+tunnel: cd3d1fec-5b35-458d-9253-ea2a0ce2613c
+credentials-file: C:\Users\Cole\.cloudflared\cd3d1fec-5b35-458d-9253-ea2a0ce2613c.json
+
+# Force HTTP/2 over TCP instead of QUIC (UDP). QUIC needs outbound UDP/443,
+# which home routers, ISPs, and VPNs (Mullvad / Cloudflare WARP) commonly block
+# — the symptom is "failed to dial to edge with quic: timeout" + a 530 at the
+# public URL. HTTP/2 over TCP/443 is universally open.
+protocol: http2
+
+ingress:
+  - hostname: aideas4ads.cognima.net
+    service: http://127.0.0.1:3000
+    originRequest:
+      connectTimeout: 30s
+      # The pipeline streams Server-Sent Events from /api/run. Talk to the local
+      # origin over HTTP/1.1 (not multiplexed H/2) so the SSE connection stays a
+      # simple long-lived stream and Cloudflare's H/2 framing can't stall it
+      # mid-stream (this is what fixes a streamed run truncating partway).
+      http2Origin: false
+      # SSE responses must not be buffered — flush chunks straight through.
+      disableChunkedEncoding: false
+
+  # Catch-all: 404 any other hostname pointed at this tunnel.
+  - service: http_status:404

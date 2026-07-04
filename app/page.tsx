@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { OfferBrief, Angle, AdCopy, Platform, ComplianceVerdict } from "@/agents/types";
 import type { JudgeResult } from "@/agents/judge";
 import { EXAMPLE_OFFERS } from "@/lib/examples";
@@ -55,10 +55,25 @@ type RunEvent =
   | { type: "complete"; seeded?: boolean; result: RunResultLike };
 
 const RUN_STAGES = ["research", "angles", "copy", "compliance", "advertorial", "judge"] as const;
+type RunStage = (typeof RUN_STAGES)[number];
 
-function nextStage(stage: string): string | null {
-  const i = RUN_STAGES.indexOf(stage as (typeof RUN_STAGES)[number]);
-  return i >= 0 && i < RUN_STAGES.length - 1 ? RUN_STAGES[i + 1] : null;
+/** Per-stage display copy + a rough duration estimate (seconds) for the ETA.
+ *  Estimates are from real runs against the thinking model; compliance + judge
+ *  are near-instant deterministic stages. */
+const STAGE_META: Record<RunStage, { label: string; detail: string; est: number }> = {
+  research: { label: "Reading the offer", detail: "Extracting product, audience, claims & risk", est: 35 },
+  angles: { label: "Generating angles", detail: "Diverging across distinct psychological hooks", est: 55 },
+  copy: { label: "Writing ad copy", detail: "Per-platform variants for each angle", est: 90 },
+  compliance: { label: "Compliance gate", detail: "Scoring every ad vs. platform + FTC policy", est: 3 },
+  advertorial: { label: "Building advertorial", detail: "A full FTC-labeled landing page", est: 90 },
+  judge: { label: "Ranking launch set", detail: "Picking the best angles & explaining why", est: 18 },
+};
+const TOTAL_EST = RUN_STAGES.reduce((s, k) => s + STAGE_META[k].est, 0);
+
+function fmtDuration(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${s}s`;
 }
 
 function summarizeVerdicts(verdicts: ComplianceVerdict[]): ComplianceSummary {
@@ -92,8 +107,20 @@ export default function Home() {
   const [advertorialLoading, setAdvertorialLoading] = useState(false);
   const [running, setRunning] = useState(false); // the one-click orchestrated run
   const [runStage, setRunStage] = useState<string | null>(null);
+  const [doneStages, setDoneStages] = useState<string[]>([]);
+  const [runStartMs, setRunStartMs] = useState<number | null>(null);
+  const [stageStartMs, setStageStartMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(0);
   const [seeded, setSeeded] = useState(false); // whether the shown run is the cached demo
   const [error, setError] = useState<string | null>(null);
+
+  // Tick a 1s clock only while a run is in flight, to drive the elapsed/ETA
+  // display. Initial `nowMs` is seeded in runAll(); the effect only owns the interval.
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running]);
 
   function clearCopyAndDownstream() {
     setCopy(null);
@@ -114,6 +141,9 @@ export default function Home() {
     setAdvertorialAngleId("");
     setJudgeResult(null);
     setSeeded(false);
+    setDoneStages([]);
+    setRunStartMs(null);
+    setStageStartMs(null);
     setError(null);
   }
 
@@ -124,6 +154,11 @@ export default function Home() {
     reset();
     setRunning(true);
     setRunStage("research");
+    setDoneStages([]);
+    const t0 = Date.now();
+    setRunStartMs(t0);
+    setStageStartMs(t0);
+    setNowMs(t0);
     try {
       const res = await fetch("/api/run", {
         method: "POST",
@@ -163,10 +198,15 @@ export default function Home() {
       setError(ev.error);
       return;
     }
+    if (ev.type === "progress" && ev.event.status === "start") {
+      // A stage began — light it up and reset the in-stage clock for the ETA.
+      setRunStage(ev.event.stage);
+      setStageStartMs(Date.now());
+    }
     if (ev.type === "progress" && ev.event.status === "done") {
       if (ev.seeded) setSeeded(true);
       applyStage(ev.event.stage, ev.event.data);
-      setRunStage(nextStage(ev.event.stage));
+      setDoneStages((prev) => (prev.includes(ev.event.stage) ? prev : [...prev, ev.event.stage]));
     }
     if (ev.type === "complete") {
       if (ev.seeded) setSeeded(true);
@@ -181,6 +221,8 @@ export default function Home() {
       setAdvertorialUrl(r.advertorialUrl);
       setJudgeResult(r.judge);
       if (r.angles[0]?.id) setAdvertorialAngleId(r.angles[0].id);
+      setDoneStages([...RUN_STAGES]);
+      setRunStage(null);
     }
   }
 
@@ -402,6 +444,16 @@ export default function Home() {
           Showing a <strong>cached demo run</strong> — the live model wasn’t reachable from here (it runs on the operator’s
           machine). Every stage below is a real, previously-generated pipeline output.
         </div>
+      )}
+
+      {running && (
+        <PipelineProgress
+          current={runStage}
+          done={doneStages}
+          seeded={seeded}
+          elapsedSec={runStartMs ? (nowMs - runStartMs) / 1000 : 0}
+          stageElapsedSec={stageStartMs ? (nowMs - stageStartMs) / 1000 : 0}
+        />
       )}
 
       {error && (
@@ -666,6 +718,73 @@ function VerdictPill({ status, count }: { status: ComplianceVerdict["status"]; c
     <span className={`rounded-full px-2 py-0.5 font-semibold ring-1 ring-inset ${VERDICT_STYLES[status]}`}>
       {count} {status}
     </span>
+  );
+}
+
+/** The loading artifact shown during a one-click run: a live stage tracker with
+ *  elapsed time and a best-effort ETA (skipped for the near-instant cached run). */
+function PipelineProgress({
+  current, done, seeded, elapsedSec, stageElapsedSec,
+}: {
+  current: string | null;
+  done: string[];
+  seeded: boolean;
+  elapsedSec: number;
+  stageElapsedSec: number;
+}) {
+  const notDone = RUN_STAGES.filter((s) => !done.includes(s));
+  const estRemaining = notDone.reduce((sum, s) => sum + STAGE_META[s].est, 0);
+  const remainingSec = Math.max(2, estRemaining - stageElapsedSec);
+  const doneEst = RUN_STAGES.filter((s) => done.includes(s)).reduce((sum, s) => sum + STAGE_META[s].est, 0);
+  const pct = Math.min(100, Math.round((doneEst / TOTAL_EST) * 100));
+
+  return (
+    <section className="mt-4 rounded-2xl border border-neutral-500/15 bg-neutral-500/3 p-5 shadow-sm">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold">
+          {done.length === RUN_STAGES.length ? "Finishing up…" : "Running the pipeline"}
+        </h2>
+        <span className="text-xs tabular-nums text-neutral-500">
+          {fmtDuration(elapsedSec)} elapsed
+          {!seeded && done.length < RUN_STAGES.length && <> · ~{fmtDuration(remainingSec)} left</>}
+        </span>
+      </div>
+
+      {/* progress bar */}
+      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-neutral-500/15">
+        <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${pct}%` }} />
+      </div>
+
+      <ol className="space-y-1.5">
+        {RUN_STAGES.map((stage) => {
+          const isDone = done.includes(stage);
+          const isCurrent = !isDone && stage === current;
+          const meta = STAGE_META[stage];
+          return (
+            <li key={stage} className={`flex items-center gap-3 rounded-lg px-2 py-1.5 ${isCurrent ? "bg-neutral-500/10" : ""}`}>
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                {isDone ? (
+                  <span className="text-emerald-500">✓</span>
+                ) : isCurrent ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-400 border-t-transparent" />
+                ) : (
+                  <span className="h-1.5 w-1.5 rounded-full bg-neutral-500/40" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm ${isCurrent ? "font-semibold" : isDone ? "text-neutral-500" : "text-neutral-400"}`}>
+                  {meta.label}
+                </p>
+                {isCurrent && <p className="truncate text-xs text-neutral-500">{meta.detail}</p>}
+              </div>
+              {isCurrent && !seeded && (
+                <span className="shrink-0 text-xs tabular-nums text-neutral-400">{fmtDuration(stageElapsedSec)}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
