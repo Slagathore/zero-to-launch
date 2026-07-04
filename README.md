@@ -1,135 +1,150 @@
-# Zero-to-Launch — Campaign Launch Agent
+# Zero-to-Launch: Campaign Launch Agent
 
-**Drop in an affiliate offer. Get back a launch-ready campaign package:** an offer brief, a spread of
-distinct marketing angles, per-platform ad copy that's been run through a compliance gate, a **live,
-FTC-labeled advertorial pre-lander you can click**, and a ranked launch set with a day-1 checklist.
-It's the whole pre-launch pipeline — the part a lean media-buying team actually loses hours to —
-compressed into one orchestrated run.
+Drop in an affiliate offer and get back a launch-ready campaign package: an offer brief, a set of
+distinct marketing angles, per-platform ad copy that has been checked by a compliance gate, a live
+FTC-labeled advertorial pre-lander you can click, and a ranked launch set with a day-1 checklist. It
+covers the pre-launch pipeline that a small media-buying team usually spends hours on, in a single
+run.
 
-**▶ Live:** https://marketingapp-ashy.vercel.app
-**Click a real generated advertorial:** https://marketingapp-ashy.vercel.app/p/ketoslim-gummies-curiosity-bt2j
+Live: https://marketingapp-ashy.vercel.app
 
-> On the public URL the model runs on the operator's machine, so hit **"watch a cached demo run"** to
-> see the full pipeline stream end-to-end from a real cached run. The advertorial pages and the
-> compliance gate are fully live there with no backend. To run everything live against a real model,
-> see [Running it](#running-it).
+Example generated advertorial: https://marketingapp-ashy.vercel.app/p/ketoslim-gummies-curiosity-bt2j
+
+> On the public URL the model runs on the operator's machine, so use the "watch a cached demo run"
+> button to see the full pipeline stream end to end from a real cached run. The advertorial pages and
+> the compliance gate are fully live there with no backend. To run everything live against a real
+> model, see [Running it](#running-it).
 
 ---
 
 ## What it does
 
-Paste an offer (or a URL) and hit **Run full pipeline**. Six agents run in sequence, each revealing
-its artifact as it lands:
+Paste an offer (or a URL) and click Run full pipeline. Six agents run in sequence, and each one
+reveals its artifact as it lands:
 
-1. **Research** → a structured `OfferBrief`: vertical, audience (who / pains / desires), USPs, the
-   risky claims detected on the page, and a compliance-risk rating.
-2. **Angle Swarm** → 4–6 *distinct* angles, each a different psychological hook, with a rationale.
-3. **Copy** → per-platform ad copy (Meta + Taboola; Google/TikTok wired), one on-voice ad per angle.
-4. **Compliance Gate** → every ad scored `pass` / `flag` / `block` against real platform + FTC policy,
-   with the offending text and a concrete fix.
-5. **Advertorial** → the top angle developed into a full, styled, FTC-disclosed pre-lander, served
-   live at `/p/[slug]`.
-6. **Judge** → ranks the angles, picks the launch set (down-ranking anything the gate blocked),
-   assembles the launch package, and explains why.
+1. **Research** produces a structured `OfferBrief`: the vertical, the audience (who they are, their
+   pains, their desires), the USPs, the risky claims found on the page, and a compliance-risk rating.
+2. **Angle Swarm** generates 4 to 6 distinct angles, each built on a different psychological hook,
+   with a short rationale.
+3. **Copy** writes per-platform ad copy (Meta and Taboola now; Google and TikTok wired), one ad per
+   angle in the offer's voice.
+4. **Compliance Gate** scores every ad as `pass`, `flag`, or `block` against platform and FTC policy,
+   and returns the offending text with a concrete fix.
+5. **Advertorial** develops the top angle into a full, styled, FTC-disclosed pre-lander, served live
+   at `/p/[slug]`.
+6. **Judge** ranks the angles, picks the launch set (down-ranking anything the gate blocked),
+   assembles the launch package, and explains the choice.
+
+After the run you can take the output out of the app. Export the launch set as platform-native CSV:
+the Meta and Taboola files use the actual bulk-import column names and CTA enums rather than the Ads
+Manager UI labels, and every row is set to `PAUSED` so nothing spends before a buyer reviews it. A
+per-angle dropdown lets you preview any ranked, gate-passed angle as a live pre-lander. A settings
+panel controls per-stage model routing (you can point the copy stage and the judge at different
+models on the same Ollama host), angle count, platform mix, and compliance strictness. A footer
+carries the generated-content disclaimer.
 
 ---
 
-## Why I built THIS one
+## Why I built this one
 
-Because in an AI-armed contest, everyone can *generate* the same tool list — dashboards, copy
-generators, LP builders. The moat isn't the idea; it's execution most people can't ship solo. The
-hardest, highest-value thing a media-buying team lacks isn't another dashboard — it's the
-*compression of the whole launch pipeline* (offer → angles → compliant copy → live pre-lander →
-ranked launch set) into one orchestrated run, with a **real QA gate in the middle** instead of vibes.
+In a contest like this, most people can generate the same list of tools: dashboards, copy
+generators, landing-page builders. The harder part is shipping the whole thing solo. What a
+media-buying team actually lacks is not another dashboard; it is having the full launch pipeline
+(offer, angles, compliant copy, live pre-lander, ranked launch set) run end to end in one pass, with
+a QA step in the middle that a reviewer can actually check.
 
-I built the orchestration because I've already built adversarial multi-agent systems — a Fusion
-Council pattern of **divergence → QA gate → judge**. This is that architecture pointed at revenue:
+I built the orchestration on top of a pattern I had used before for multi-agent systems: divergence,
+then a QA gate, then a judge. Here that pattern maps directly onto the app:
 
-| Fusion Council stage | This app |
+| Pattern stage | This app |
 |---|---|
 | divergence (swarm) | the Angle Swarm generating distinct hooks |
-| QA gate | the deterministic Compliance Gate that blocks/flags copy |
+| QA gate | the deterministic Compliance Gate that blocks or flags copy |
 | judge | the Judge that ranks, selects, and explains the launch set |
 
-Two deliberate engineering calls that make it *trustworthy*, not just impressive:
+Two design decisions matter for trust:
 
-- **The Compliance Gate and the Judge are deterministic** (regex ruleset + a transparent score), not
-  another LLM you have to trust. Same copy always scores the same way, a reviewer can read exactly
-  which rule fired, and both work with **no model at all** — which is why they run live on the public
-  URL. A QA gate you can't reproduce isn't a QA gate.
-- **The advertorial model emits structured content, never HTML.** A fixed template renders it with
-  every string escaped, so the model can't inject markup and can't remove the FTC disclosure. The
-  persuasion is the model's job; the safety is the code's.
+- The Compliance Gate and the Judge are deterministic: a regex ruleset and a plain score, not another
+  model you have to trust. The same copy always scores the same way, a reviewer can read exactly which
+  rule fired, and both work with no model at all, which is why they run on the public URL.
+- The advertorial model returns structured content, not HTML. A fixed template renders it with every
+  string escaped, so the model cannot inject markup and cannot remove the FTC disclosure.
 
 ## What I'd build next (if this were the full-time job)
 
-The architecture is built to extend — every agent is a typed `input → output` module behind a clean
-contract, so new agents plug into the same pipeline:
+Every agent is a typed `input to output` module behind a fixed contract, so a new agent plugs into
+the same pipeline without touching the rest.
 
-- **Compliance Gate v2** — swap the curated ruleset for a live policy-RAG over the full Meta / Google
-  / TikTok / Taboola + FTC corpora. The gate's interface doesn't change; only its brain does. *(This
-  is the honest #1 — the current 22 rules are a high-signal curated subset, not the full policy.)*
-- **Native Placement Optimizer** — post-launch, ingest Taboola/Outbrain placement data, auto-flag
-  money-losing widgets, and recommend blacklists with projected savings. Native spend hygiene is
-  where the pipeline's ROI compounds.
-- **Creative Fatigue Radar** — watch per-creative CTR/CVR decay and auto-spin fresh variants of
-  winners before they die.
-- **Closed loop** — feed live performance back into the Angle Swarm so the system *learns which
-  angles convert* for a given vertical. That's when it stops being a generator and becomes a system.
+- **Compliance Gate v2**: replace the curated ruleset with a live policy-RAG over the full Meta,
+  Google, TikTok, Taboola, and FTC corpora. The interface stays the same; only the implementation
+  changes. The current 22 rules are a curated subset, not the full policy.
+- **Native Placement Optimizer**: after launch, ingest Taboola and Outbrain placement data, flag
+  money-losing widgets, and recommend blacklists with projected savings.
+- **Creative Fatigue Radar**: track per-creative CTR and CVR decay and generate fresh variants of the
+  winners before they drop off.
+- **Closed loop**: feed live performance back into the Angle Swarm so it can weight angles by what
+  converts for a given vertical.
 
 ---
 
 ## Architecture
 
-Hand-rolled orchestration — no LangChain. The typed contracts between agents (`agents/types.ts`)
-*are* the architecture; every agent is a module you can read top to bottom.
+Orchestration is hand-written, with no LangChain. The typed contracts in `agents/types.ts` define how
+the agents connect, and each agent is a single module you can read top to bottom.
 
 ```
 app/
   page.tsx              stepper UI + one-click streamed run
-  p/[slug]/page.tsx     LIVE advertorial pages
+  p/[slug]/page.tsx     live advertorial pages
   api/
     research | angles | copy | compliance | advertorial | judge   (per-stage)
     run                 orchestrated, streamed (SSE) end-to-end run + seeded fallback
+    fix-copy            one-shot compliance-driven copy rewrite
+    models | ping       Ollama model list + reachability probe (settings panel)
+components/
+  SettingsPanel.tsx     per-stage model routing + generation/compliance knobs
 agents/
-  types.ts              the typed contracts (the architecture)
-  research · angles · copy · compliance · advertorial · judge · orchestrator
+  types.ts              the typed contracts
+  research, angles, copy, compliance, advertorial, judge
+  orchestrator, orchestrator-core   (streamed run + its pure, testable core)
 lib/
-  llm.ts                multi-provider client w/ fallback (Ollama-first)
-  planjson.ts           extract + repair the JSON LLMs actually emit
-  agentJson.ts          the shared generate → repair → coerce primitive
+  llm.ts                multi-provider client with fallback (Ollama-first)
+  planjson.ts           extract and repair the JSON that LLMs actually emit
+  agentJson.ts          the shared generate, repair, coerce primitive
   fence.ts              prompt-injection defense for untrusted offer text
   fetchOffer.ts         URL fetch + readability + pasted-text fallback
+  exporters.ts          platform-native CSV (Meta/Taboola bulk-import + enums)
+  settings.ts           useSettings.ts   per-stage settings model + client hook
+  examples.ts           built-in sample offers
   compliance-rules.json the curated policy ruleset
-  advertorialStore.ts   memory → data/ → bundled-seed persistence
-  seededRun.ts          the un-killable-demo cache loader
+  advertorialStore.ts   memory, then data/, then bundled-seed persistence
+  seededRun.ts          the seeded demo cache loader
 ```
 
-**Resilience is a feature, not an afterthought.** The model here is a *thinking* model that
-occasionally truncates its JSON; every generation agent repairs malformed JSON (`planjson`), retries,
-and degrades to partial results rather than crashing. The whole pipeline falls back to a real cached
-run if the live model is unreachable, so a demo never cold-fails.
+The model is a reasoning model that sometimes truncates its JSON. Every generation agent repairs
+malformed JSON (`planjson`), retries, and returns partial results instead of crashing. If the live
+model is unreachable, the whole pipeline falls back to a real cached run, so a demo never fails cold.
 
 ## Tech
 
-- **Next.js (App Router) + TypeScript** on **Vercel** — one repo for API, UI, and the hosted
+- Next.js (App Router) and TypeScript on Vercel: one repo for the API, the UI, and the hosted
   advertorials.
-- **Self-hosted Ollama** via its OpenAI-compatible endpoint, model **`kimi-k2.6:cloud`** (strong at
-  persuasive copy + structured JSON). Anthropic is wired as an optional fallback leg.
-- **Vitest** — 109 tests (agent coercers, the compliance ruleset, XSS-safe rendering, judge scoring,
-  the seeded fallback).
+- Self-hosted Ollama over its OpenAI-compatible endpoint, model `kimi-k2.6:cloud`, which is good at
+  persuasive copy and structured JSON. Anthropic is wired in as an optional fallback.
+- Vitest, 143 tests covering the agent coercers, the compliance ruleset, XSS-safe rendering, judge
+  scoring, the platform-native CSV exporters, the settings model, and the seeded fallback.
 
 ## Running it
 
 ```bash
 npm install
-cp .env.example .env.local     # local dev defaults to localhost Ollama — usually no edits needed
-npm run dev                    # http://localhost:3000 — full live pipeline against your Ollama
-npm test                       # 109 tests
+cp .env.example .env.local     # local dev defaults to localhost Ollama, usually no edits needed
+npm run dev                    # http://localhost:3000, full live pipeline against your Ollama
+npm test                       # 143 tests
 ```
 
-**Public live demo backed by local Ollama** — one fluid startup that brings up a cloudflared tunnel
-*before* the app, so the whole live pipeline is reachable at a public URL:
+To expose a public demo backed by a local Ollama, this brings up a cloudflared tunnel before the app
+so the full pipeline is reachable at a public URL:
 
 ```bash
 npm run live                   # requires cloudflared on PATH; prints the public https URL
@@ -138,11 +153,11 @@ npm run live                   # requires cloudflared on PATH; prints the public
 Vercel stays up as the always-on shell: the advertorial pages, the compliance gate, and the seeded
 run all work there with no backend.
 
-## Honest limitations
+## Limitations
 
-- **Compliance rules are a curated subset** (22 high-signal patterns), not the full policy corpora —
-  labeled as such in `compliance-rules.json`. Policy-RAG is the top what's-next.
-- **Live model calls need the operator's machine** (local Ollama or the `npm run live` tunnel); the
-  always-on Vercel deploy serves the deterministic + seeded demos.
-- **Generated advertorials on Vercel** live in the serverless instance's tmp; committed seeds are the
+- The compliance rules are a curated subset (22 patterns), not the full policy corpora. This is noted
+  in `compliance-rules.json`. A policy-RAG is the main next step.
+- Live model calls need the operator's machine (local Ollama or the `npm run live` tunnel). The
+  always-on Vercel deploy serves the deterministic and seeded demos.
+- Generated advertorials on Vercel live in the serverless instance's tmp; the committed seeds are the
   durable public ones.
