@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import type { OfferBrief, Angle, AdCopy, Platform, ComplianceVerdict } from "@/agents/types";
 import type { JudgeResult } from "@/agents/judge";
 import { EXAMPLE_OFFERS } from "@/lib/examples";
+import { buildMetaCsv, buildTaboolaCsv, buildGenericCsv, overLimitFields, type ExportCtx } from "@/lib/exporters";
 
 /**
  * Stepper UI (ZERO_TO_LAUNCH_BUILD_PLAN.md §2): paste/URL offer → Research
@@ -376,6 +377,22 @@ export default function Home() {
     }
   }
 
+  function exportCsv(kind: "meta" | "taboola" | "generic") {
+    if (!copy || !angles) return;
+    const ctx: ExportCtx = {
+      product: brief?.product ?? "offer",
+      origin: typeof window !== "undefined" ? window.location.origin : "",
+      advertorialUrls,
+      fallbackUrl: judgeResult?.launchPackage.advertorialUrl ?? "",
+      recommendedIds: new Set(judgeResult?.launchPackage.recommendedAngles.map((a) => a.id) ?? []),
+    };
+    const [content, filename]: [string, string] =
+      kind === "meta" ? [buildMetaCsv(copy, angles, ctx), "meta_ads.csv"]
+        : kind === "taboola" ? [buildTaboolaCsv(copy, angles, ctx), "taboola_ads.csv"]
+          : [buildGenericCsv(copy, angles, ctx), "generic_ads.csv"];
+    downloadFile(filename, content, "text/csv;charset=utf-8");
+  }
+
   const canRun = mode === "url" ? url.trim().length > 0 : text.trim().length > 0;
 
   // Match each ad to its compliance verdict BY POSITION: compliance() returns
@@ -576,17 +593,28 @@ export default function Home() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {items.map((c, i) => {
                   const verdict = verdictByCopy.get(c);
+                  const over = overLimitFields(c);
                   return (
                     <div key={`${c.angleId}-${i}`} className="flex flex-col rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <span className="rounded-full bg-neutral-500/15 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
                           {hookFor(angles, c.angleId)}
                         </span>
-                        {verdict && (
-                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[verdict.status]}`}>
-                            {verdict.status}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {over.length > 0 && (
+                            <span
+                              title={over.map((o) => `${o.field} ${o.len}/${o.max}`).join(", ")}
+                              className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/30 dark:text-amber-400"
+                            >
+                              ⚠ over {c.platform} limit
+                            </span>
+                          )}
+                          {verdict && (
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[verdict.status]}`}>
+                              {verdict.status}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm font-semibold leading-snug">{c.headline}</p>
                       <p className="mt-1 flex-1 text-sm text-neutral-600 dark:text-neutral-300">{c.primaryText}</p>
@@ -720,32 +748,38 @@ export default function Home() {
 
           <ListField label="Launch checklist" items={judgeResult.launchPackage.checklist} />
 
-          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-neutral-500/15 pt-4">
+          <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-neutral-500/15 pt-4">
+            {/* Platform-native, paste-to-import CSVs (all generated ads, Status=PAUSED). */}
+            {copy?.some((c) => c.platform === "meta") && (
+              <button onClick={() => exportCsv("meta")} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200">
+                Meta CSV
+              </button>
+            )}
+            {copy?.some((c) => c.platform === "taboola") && (
+              <button onClick={() => exportCsv("taboola")} className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200">
+                Taboola CSV
+              </button>
+            )}
+            <button onClick={() => exportCsv("generic")} className="rounded-lg border border-neutral-500/30 px-3.5 py-2 text-sm font-medium transition hover:border-neutral-500/60">
+              Generic CSV
+            </button>
+            <span className="mx-1 text-neutral-500/40">·</span>
             <button
               onClick={() => exportLaunchPackage(judgeResult.launchPackage)}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+              className="rounded-lg border border-neutral-500/30 px-3.5 py-2 text-sm font-medium transition hover:border-neutral-500/60"
             >
-              ⬇ Export launch package
+              JSON
             </button>
             <button
               onClick={() => copyLaunchPackage(judgeResult.launchPackage, setCopied)}
-              className="rounded-lg border border-neutral-500/30 px-4 py-2 text-sm font-medium transition hover:border-neutral-500/60"
+              className="rounded-lg border border-neutral-500/30 px-3.5 py-2 text-sm font-medium transition hover:border-neutral-500/60"
             >
-              {copied ? "Copied ✓" : "Copy as text"}
+              {copied ? "Copied ✓" : "Copy text"}
             </button>
-            {judgeResult.launchPackage.advertorialUrl && (
-              <a
-                href={judgeResult.launchPackage.advertorialUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium text-emerald-700 underline underline-offset-2 dark:text-emerald-400"
-              >
-                Open the recommended advertorial ↗
-              </a>
-            )}
             <span className="w-full text-xs text-neutral-500">
-              The launch package (brief · recommended angles · their copy · advertorial URL · checklist)
-              is the deliverable you hand to your ad tools — export it as JSON or copy it.
+              <strong>Meta / Taboola CSVs use each platform&apos;s real bulk-import columns</strong> (Meta:
+              Title/Body + CTA enum; Taboola: native Title/Brand) — paste-to-import. Every row ships
+              <code className="mx-1 rounded bg-neutral-500/10 px-1">Status=PAUSED</code> so nothing spends until you review.
             </span>
           </div>
         </Card>
@@ -804,18 +838,23 @@ function angleStatus(angleId: string, verdicts: ComplianceVerdict[] | null): Com
 
 type LaunchPackageT = JudgeResult["launchPackage"];
 
-/** Download the launch package as a JSON file — the deliverable for ad tools. */
-function exportLaunchPackage(lp: LaunchPackageT) {
-  const blob = new Blob([JSON.stringify(lp, null, 2)], { type: "application/json" });
+/** Trigger a browser download of a text blob. */
+function downloadFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
-  const slug = (lp.offerBrief.product || "offer").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "launch";
   const a = document.createElement("a");
   a.href = url;
-  a.download = `launch-package-${slug}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Download the launch package as a JSON file — the deliverable for ad tools. */
+function exportLaunchPackage(lp: LaunchPackageT) {
+  const slug = (lp.offerBrief.product || "offer").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "launch";
+  downloadFile(`launch-package-${slug}.json`, JSON.stringify(lp, null, 2), "application/json");
 }
 
 /** Copy the launch package as readable text to the clipboard. */
