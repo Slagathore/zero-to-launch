@@ -27,16 +27,16 @@ export const COPY_PLATFORMS: Platform[] = ["meta", "taboola"];
 const PLATFORM_GUIDANCE: Record<Platform, string> = {
   meta: `Platform: META (Facebook / Instagram feed ads).
 Voice: conversational, scroll-stopping, feels native to a social feed. Lead with a pattern-interrupt hook.
-Field guidance:
-- primaryText: the body above the creative. Open with a 1-line hook, then 1-2 short lines of benefit. ~125 chars is the sweet spot; keep it tight.
-- headline: bold benefit under the image, ~40 chars max.
-- description: one short supporting line, ~30 chars.
+STRICT length limits (Meta truncates past these in-feed — DO NOT exceed):
+- headline: a SHORT punchy benefit, MAX 40 characters. NOT an article title.
+- primaryText: MAX 125 characters — one hook line + one benefit line. Count characters; keep it tight.
+- description: MAX 30 characters.
 - cta: use a real Meta CTA button label — one of "Learn More", "Shop Now", "Sign Up", "Get Offer", "Subscribe".`,
   taboola: `Platform: TABOOLA (native content-recommendation widget).
 Voice: editorial curiosity — it must read like a recommended article, NOT an ad. Third-person, intrigue, open loop.
-Field guidance:
-- headline: the clickable native title. Curiosity + benefit, ~50-70 chars. This is the most important field.
-- primaryText: a short teaser that continues the open loop, ~90 chars.
+STRICT length limits (do NOT exceed):
+- headline: the clickable native title, curiosity + benefit, MAX 60 characters. This is the most important field.
+- primaryText: a short teaser that continues the open loop, MAX 90 characters.
 - description: one secondary supporting line.
 - cta: a soft native CTA — one of "Read More", "Learn More", "Find Out", "See Why".`,
   google: `Platform: GOOGLE (responsive search ads).
@@ -193,9 +193,11 @@ async function copyForPlatformResilient(
   return { copy: [], meta: null, error: `${platform}: ${lastError}` };
 }
 
-/** Cap on how many angles we write copy for in one run — bounds output size
- *  (and mirrors real practice: you write copy for your best few angles). */
-export const MAX_ANGLES_FOR_COPY = 6;
+/** Cap on how many angles we write copy for in one run. Matches the settings'
+ *  max angle count (8) so every generated angle gets copy — a copy-less angle
+ *  would otherwise show a misleading vacuous "pass" and rank oddly. Copy is
+ *  fast (concurrent platforms + think:false), so 8 is cheap. */
+export const MAX_ANGLES_FOR_COPY = 8;
 
 export interface CopyOutput {
   copy: AdCopy[];
@@ -212,6 +214,57 @@ export interface CopyOutput {
  * only if EVERY platform failed. Results are ordered by the `platforms` array,
  * not by which finished first, so output is deterministic.
  */
+/**
+ * Rewrite ONE ad to fix its compliance violations, keeping the angle, platform
+ * voice, and persuasive intent. Used by the per-ad "Fix" button. Returns a new
+ * AdCopy for the same angle + platform.
+ */
+export async function fixAdCopy(
+  brief: OfferBrief,
+  angle: Angle,
+  ad: AdCopy,
+  violations: { offendingText: string; fix: string }[],
+  model?: string,
+): Promise<AdCopy> {
+  const fixes = violations.map((v) => `- "${v.offendingText}": ${v.fix}`).join("\n") || "- tighten claims to what the offer supports";
+  const { value } = await generateJson<AdCopy>(
+    [
+      {
+        role: "system",
+        content: `You are a compliance-savvy direct-response copywriter. Rewrite ONE ad to FIX specific policy violations while keeping its angle, platform voice, and persuasive intent.\n\n${PLATFORM_GUIDANCE[ad.platform]}\n\nReturn ONLY JSON (no prose): {"headline": string, "primaryText": string, "description": string, "cta": string}.`,
+      },
+      {
+        role: "user",
+        content: `Offer: ${brief.product} (${brief.vertical}). Angle: [${angle.hookType}] ${angle.headlineSeed}.
+
+Current ad:
+headline: ${ad.headline}
+primaryText: ${ad.primaryText}
+description: ${ad.description}
+cta: ${ad.cta}
+
+Fix these compliance issues (keep the persuasion, remove the violation):
+${fixes}
+
+Return the corrected ad as JSON.`,
+      },
+    ],
+    (raw) => {
+      const c = asRecord(raw);
+      return {
+        angleId: ad.angleId,
+        platform: ad.platform,
+        headline: asString(c.headline) || ad.headline,
+        primaryText: asString(c.primaryText) || ad.primaryText,
+        description: asString(c.description),
+        cta: asString(c.cta) || ad.cta,
+      };
+    },
+    { temperature: 0.6, maxTokens: 2500, model },
+  );
+  return value;
+}
+
 export async function copy(
   brief: OfferBrief,
   angles: Angle[],

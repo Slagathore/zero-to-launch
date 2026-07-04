@@ -121,8 +121,8 @@ describe("copy() resilience", () => {
     expect(calls.get("meta")).toBe(2); // one retry each
   });
 
-  it("caps the number of angles sent for copy", () => {
-    expect(MAX_ANGLES_FOR_COPY).toBeGreaterThanOrEqual(4);
-    expect(MAX_ANGLES_FOR_COPY).toBeLessThanOrEqual(6);
+  it("caps the number of angles sent for copy at the settings' max angle count", () => {
+    expect(MAX_ANGLES_FOR_COPY).toBeGreaterThanOrEqual(6);
+    expect(MAX_ANGLES_FOR_COPY).toBeLessThanOrEqual(8);
   });
 });

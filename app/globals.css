@@ -3,6 +3,20 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Make native controls (select popups, options, scrollbars) follow the
+     page theme, so dropdown option text isn't light-on-white and invisible. */
+  color-scheme: light dark;
+}
+
+/* Belt-and-suspenders: give select + its options explicit theme-aware colors
+   so the dropdown list is always legible even where color-scheme is ignored. */
+select {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+select option {
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 @theme inline {

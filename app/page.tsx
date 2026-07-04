@@ -104,11 +104,13 @@ export default function Home() {
   const [advertorialUrls, setAdvertorialUrls] = useState<Record<string, string>>({});
   const [advertorialMeta, setAdvertorialMeta] = useState<RunMeta | null>(null);
   const [advertorialAngleId, setAdvertorialAngleId] = useState<string>("");
+  const [copyTab, setCopyTab] = useState<Platform | null>(null); // which platform tab is shown in Step 4
   const [judgeResult, setJudgeResult] = useState<JudgeResult | null>(null);
 
   const [researchLoading, setResearchLoading] = useState(false);
   const [anglesLoading, setAnglesLoading] = useState(false);
   const [copyLoading, setCopyLoading] = useState(false);
+  const [fixingKey, setFixingKey] = useState<string | null>(null); // ad currently being auto-fixed
   const [advertorialLoading, setAdvertorialLoading] = useState(false);
   const [running, setRunning] = useState(false); // the one-click orchestrated run
   const [runStage, setRunStage] = useState<string | null>(null);
@@ -363,6 +365,42 @@ export default function Home() {
     }
   }
 
+  /** Rewrite one flagged/blocked ad to resolve its violations, swap it in, re-score. */
+  async function runFixCopy(ad: AdCopy) {
+    if (!brief || !copy || !angles) return;
+    const angle = angles.find((a) => a.id === ad.angleId);
+    if (!angle) return;
+    const idx = copy.indexOf(ad);
+    const violations = verdicts && idx >= 0 && idx < verdicts.length ? verdicts[idx].violations : [];
+    const key = `${ad.angleId}-${ad.platform}-${idx}`;
+    setFixingKey(key);
+    setError(null);
+    try {
+      const res = await fetch("/api/fix-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief, angle, ad, violations, model: settings.models.copy, strictness: settings.compliance.strictness }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Fix failed.");
+      if (idx >= 0) {
+        const nextCopy = [...copy];
+        nextCopy[idx] = data.ad;
+        setCopy(nextCopy);
+        if (verdicts && idx < verdicts.length) {
+          const nextVerdicts = [...verdicts];
+          nextVerdicts[idx] = data.verdict;
+          setVerdicts(nextVerdicts);
+          setComplianceSummary(summarizeVerdicts(nextVerdicts));
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFixingKey(null);
+    }
+  }
+
   async function runCompliance(copyToScore: AdCopy[]) {
     try {
       const res = await fetch("/api/compliance", {
@@ -604,61 +642,86 @@ export default function Home() {
               )}
             </div>
           )}
-          {groupByPlatform(copy).map(([platform, items]) => (
-            <div key={platform} className="mt-2 first:mt-0">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                {PLATFORM_LABELS[platform] ?? platform}
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {items.map((c, i) => {
-                  const verdict = verdictByCopy.get(c);
-                  const over = overLimitFields(c);
-                  return (
-                    <div key={`${c.angleId}-${i}`} className="flex flex-col rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="rounded-full bg-neutral-500/15 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
-                          {hookFor(angles, c.angleId)}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          {over.length > 0 && (
-                            <span
-                              title={over.map((o) => `${o.field} ${o.len}/${o.max}`).join(", ")}
-                              className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/30 dark:text-amber-400"
-                            >
-                              ⚠ over {c.platform} limit
-                            </span>
-                          )}
-                          {verdict && (
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[verdict.status]}`}>
-                              {verdict.status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-sm font-semibold leading-snug">{c.headline}</p>
-                      <p className="mt-1 flex-1 text-sm text-neutral-600 dark:text-neutral-300">{c.primaryText}</p>
-                      {c.description && <p className="mt-1 text-xs text-neutral-500">{c.description}</p>}
-                      <span className="mt-3 self-start rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-white dark:text-neutral-900">
-                        {c.cta}
-                      </span>
-                      {verdict && verdict.violations.length > 0 && (
-                        <ul className="mt-3 space-y-1.5 border-t border-neutral-500/15 pt-2.5">
-                          {verdict.violations.map((v, vi) => (
-                            <li key={vi} className="text-[11px] leading-snug">
-                              <span className={`font-semibold ${v.severity === "block" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400"}`}>
-                                {v.severity}
+          {(() => {
+            const groups = groupByPlatform(copy);
+            const active = copyTab && groups.some(([p]) => p === copyTab) ? copyTab : groups[0][0];
+            const activeItems = groups.find(([p]) => p === active)?.[1] ?? [];
+            return (
+              <>
+                {/* platform tabs */}
+                <div className="mb-3 flex flex-wrap gap-1">
+                  {groups.map(([p, items]) => (
+                    <button
+                      key={p}
+                      onClick={() => setCopyTab(p)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${p === active ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "text-neutral-500 hover:bg-neutral-500/10"}`}
+                    >
+                      {PLATFORM_LABELS[p] ?? p} <span className="opacity-60">({items.length})</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {activeItems.map((c) => {
+                    const verdict = verdictByCopy.get(c);
+                    const over = overLimitFields(c);
+                    const fixKey = `${c.angleId}-${c.platform}-${copy.indexOf(c)}`;
+                    const fixing = fixingKey === fixKey;
+                    return (
+                      <div key={fixKey} className="flex flex-col rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="rounded-full bg-neutral-500/15 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
+                            {hookFor(angles, c.angleId)}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {over.length > 0 && (
+                              <span
+                                title={`Over ${c.platform}'s recommended length — may truncate in-feed: ${over.map((o) => `${o.field} ${o.len}/${o.max}`).join(", ")}`}
+                                className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/30 dark:text-amber-400"
+                              >
+                                may truncate
                               </span>
-                              <span className="text-neutral-500"> · “{v.offendingText}” — {v.fix}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                            )}
+                            {verdict && (
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[verdict.status]}`}>
+                                {verdict.status}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-sm font-semibold leading-snug">{c.headline}</p>
+                        <p className="mt-1 flex-1 text-sm text-neutral-600 dark:text-neutral-300">{c.primaryText}</p>
+                        {c.description && <p className="mt-1 text-xs text-neutral-500">{c.description}</p>}
+                        <span className="mt-3 self-start rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-white dark:text-neutral-900">
+                          {c.cta}
+                        </span>
+                        {verdict && verdict.violations.length > 0 && (
+                          <div className="mt-3 border-t border-neutral-500/15 pt-2.5">
+                            <ul className="space-y-1.5">
+                              {verdict.violations.map((v, vi) => (
+                                <li key={vi} className="text-[11px] leading-snug">
+                                  <span className={`font-semibold ${v.severity === "block" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400"}`}>
+                                    {v.severity}
+                                  </span>
+                                  <span className="text-neutral-500"> · “{v.offendingText}” — {v.fix}</span>
+                                </li>
+                              ))}
+                            </ul>
+                            <button
+                              onClick={() => runFixCopy(c)}
+                              disabled={fixing || running}
+                              className="mt-2.5 rounded-md bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-500/30 transition hover:bg-amber-500/25 disabled:opacity-50 dark:text-amber-400"
+                            >
+                              {fixing ? "Fixing…" : "✨ Fix this ad"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
         </Card>
       )}
 
@@ -748,16 +811,22 @@ export default function Home() {
           </div>
 
           <div className="mt-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">Ranking</p>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
+              Ranking <span className="normal-case text-neutral-400">— by compliance health, copy completeness &amp; reach</span>
+            </p>
             <ol className="space-y-1.5">
               {judgeResult.ranking.map((r, i) => {
                 const picked = judgeResult.launchPackage.recommendedAngles.some((a) => a.id === r.angleId);
                 return (
                   <li key={r.angleId} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${picked ? "bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/25" : "bg-neutral-500/5"}`}>
                     <span className="w-5 shrink-0 text-xs font-semibold text-neutral-400">{i + 1}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[r.worstStatus]}`}>{r.worstStatus}</span>
+                    {r.hasCopy ? (
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ring-1 ring-inset ${VERDICT_STYLES[r.worstStatus]}`}>{r.worstStatus}</span>
+                    ) : (
+                      <span className="rounded-full bg-neutral-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase text-neutral-500 ring-1 ring-inset ring-neutral-500/25">no copy</span>
+                    )}
                     <span className="flex-1 truncate">{r.headlineSeed}</span>
-                    <span className="shrink-0 text-[11px] text-neutral-500">{r.hookType} · {r.score}</span>
+                    <span className="shrink-0 text-[11px] text-neutral-500" title="Score = compliance health + copy completeness + platform reach">{r.hookType} · {r.score}</span>
                     {picked && <span className="shrink-0 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">LAUNCH</span>}
                   </li>
                 );

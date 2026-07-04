@@ -38,9 +38,18 @@ export async function GET() {
       /* endpoint unreachable — leave ollama:false, empty list */
     }
   }
+  // Surface Claude as a choice when an Anthropic key is configured (same idea
+  // as claw-deck: a provider that's configured should be selectable). These
+  // route to Anthropic via providerChain's isAnthropicModel() check.
+  const anthropic = !!(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.trim());
+  if (anthropic) {
+    const claude = [process.env.ANTHROPIC_MODEL || "claude-sonnet-5", "claude-sonnet-5", "claude-opus-4-8"];
+    for (const m of claude) if (!models.includes(m)) models.unshift(m);
+  }
+
   return NextResponse.json({
     ollama,
-    anthropic: !!(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY.trim()),
+    anthropic,
     models,
     defaultModel: s.primaryModel,
   });

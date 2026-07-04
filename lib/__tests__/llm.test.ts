@@ -85,6 +85,19 @@ describe("providerChain (every leg is opt-in; Ollama is this project's primary)"
   it("honors a model override for the primary slot", () => {
     expect(providerChain(ollamaPrimary, "kimi-k2-thinking:cloud")[0].model).toBe("kimi-k2-thinking:cloud");
   });
+
+  it("routes a claude-* override to Anthropic FIRST (with an Ollama fallback)", () => {
+    const s = { ...nativeDefault, anthropicApiKey: "sk-test" };
+    const chain = providerChain(s, "claude-sonnet-5");
+    expect(chain[0].kind).toBe("anthropic");
+    expect(chain[0].model).toBe("claude-sonnet-5");
+    expect(chain[1]?.kind).toBe("ollama-native");
+    expect(chain[1]?.model).toBe("kimi-k2.6:cloud");
+  });
+
+  it("does not route claude-* to Anthropic when no key is set (stays on Ollama)", () => {
+    expect(providerChain(nativeDefault, "claude-sonnet-5")[0].kind).toBe("ollama-native");
+  });
 });
 
 describe("generate", () => {

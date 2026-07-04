@@ -83,50 +83,53 @@ export interface SettingsLike {
  * and returns the reasoning when content is empty). If ollamaBaseUrl is unset,
  * we fall back to the openai-compat leg. Anthropic joins only when its key is set.
  */
+/** A model name that should be served by Anthropic, not Ollama. */
+export function isAnthropicModel(model: string): boolean {
+  return /^claude/i.test(model.trim());
+}
+
 export function providerChain(s: SettingsLike, modelOverride?: string): ProviderDescriptor[] {
   const chain: ProviderDescriptor[] = [];
-  const primaryModel = modelOverride || s.primaryModel;
+  const anthropicKey = s.anthropicApiKey?.trim();
 
-  if (s.ollamaBaseUrl && s.ollamaBaseUrl.trim()) {
-    chain.push({
-      name: "ollama (native, think:false)",
-      kind: "ollama-native",
-      baseUrl: s.ollamaBaseUrl,
-      apiKey: s.openaiCompatKey || "ollama",
-      model: primaryModel,
-    });
-  } else if (s.openaiCompatUrl && s.openaiCompatUrl.trim()) {
-    chain.push({
-      name: "ollama (openai /v1)",
-      kind: "openai-compat",
-      baseUrl: s.openaiCompatUrl,
-      apiKey: s.openaiCompatKey || "ollama",
-      model: primaryModel,
-    });
+  const anthropicLeg = (model: string): ProviderDescriptor => ({
+    name: "anthropic",
+    kind: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    apiKey: anthropicKey ?? "",
+    model,
+  });
+  const ollamaLeg = (model: string): ProviderDescriptor | null => {
+    if (s.ollamaBaseUrl && s.ollamaBaseUrl.trim()) {
+      return { name: "ollama (native, think:false)", kind: "ollama-native", baseUrl: s.ollamaBaseUrl, apiKey: s.openaiCompatKey || "ollama", model };
+    }
+    if (s.openaiCompatUrl && s.openaiCompatUrl.trim()) {
+      return { name: "ollama (openai /v1)", kind: "openai-compat", baseUrl: s.openaiCompatUrl, apiKey: s.openaiCompatKey || "ollama", model };
+    }
+    return null;
+  };
+
+  // Route by the OVERRIDE model name: a claude-* override goes to Anthropic
+  // directly (with an Ollama fallback), so selecting Claude for a stage
+  // actually uses Claude instead of trying it against Ollama first.
+  if (modelOverride && isAnthropicModel(modelOverride) && anthropicKey) {
+    chain.push(anthropicLeg(modelOverride));
+    const fb = ollamaLeg(s.primaryModel);
+    if (fb) chain.push(fb);
+    return chain;
   }
 
-  if (s.anthropicApiKey && s.anthropicApiKey.trim()) {
-    chain.push({
-      name: "anthropic",
-      kind: "anthropic",
-      baseUrl: "https://api.anthropic.com",
-      apiKey: s.anthropicApiKey.trim(),
-      model: modelOverride || s.anthropicModel,
-    });
-  }
+  const primary = ollamaLeg(modelOverride || s.primaryModel);
+  if (primary) chain.push(primary);
 
-  // Local fallback model on the same OpenAI-compat surface, only if it's
-  // configured and differs from the primary (otherwise it's a pointless
-  // retry of the same thing).
+  // Anthropic fallback: an override here is an Ollama model, so fall back on
+  // the configured default Anthropic model, not the override.
+  if (anthropicKey) chain.push(anthropicLeg(s.anthropicModel));
+
+  // Second local Ollama model, only if configured + different from the primary.
   const localModel = s.fallbackLocalModel;
   if (s.openaiCompatUrl && s.openaiCompatUrl.trim() && localModel && localModel !== (modelOverride || s.primaryModel)) {
-    chain.push({
-      name: `ollama-local (${localModel})`,
-      kind: "openai-compat",
-      baseUrl: s.openaiCompatUrl,
-      apiKey: s.openaiCompatKey || "ollama",
-      model: localModel,
-    });
+    chain.push({ name: `ollama-local (${localModel})`, kind: "openai-compat", baseUrl: s.openaiCompatUrl, apiKey: s.openaiCompatKey || "ollama", model: localModel });
   }
 
   return chain;
