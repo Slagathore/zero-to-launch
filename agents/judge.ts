@@ -176,6 +176,7 @@ async function modelRationale(
   brief: OfferBrief,
   ranked: AngleScore[],
   launchSet: Angle[],
+  model?: string,
 ): Promise<{ text: string; source: "model" | "heuristic" }> {
   const fallback = heuristicRationale(ranked, launchSet);
   if (launchSet.length === 0) return { text: fallback, source: "heuristic" };
@@ -196,7 +197,7 @@ async function modelRationale(
           content: `Offer: ${brief.product} (${brief.vertical}). Ranked angles:\n${summary}\n\nRecommended launch set: ${picks}\n\nWrite the rationale.`,
         },
       ],
-      { temperature: 0.5, maxTokens: 1200 },
+      { temperature: 0.5, maxTokens: 1200, model },
     );
     const text = res.text.trim();
     return text.length > 20 ? { text, source: "model" } : { text: fallback, source: "heuristic" };
@@ -212,6 +213,7 @@ export interface JudgeInput {
   verdicts: ComplianceVerdict[];
   advertorialUrl: string;
   launchSetSize?: number;
+  model?: string; // model for the rationale narrative
 }
 
 export interface JudgeOutput {
@@ -228,7 +230,7 @@ export async function judge(input: JudgeInput): Promise<JudgeOutput> {
   const recommendedCopy = copy.filter((c) => recommendedIds.has(c.angleId));
   const platforms = [...new Set(recommendedCopy.map((c) => c.platform))];
 
-  const { text: rationale, source } = await modelRationale(brief, ranking, recommendedAngles);
+  const { text: rationale, source } = await modelRationale(brief, ranking, recommendedAngles, input.model);
 
   const launchPackage: LaunchPackage = {
     offerBrief: brief,

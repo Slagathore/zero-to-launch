@@ -5,6 +5,8 @@ import type { OfferBrief, Angle, AdCopy, Platform, ComplianceVerdict } from "@/a
 import type { JudgeResult } from "@/agents/judge";
 import { EXAMPLE_OFFERS } from "@/lib/examples";
 import { buildMetaCsv, buildTaboolaCsv, buildGenericCsv, overLimitFields, type ExportCtx } from "@/lib/exporters";
+import { useSettings } from "@/lib/useSettings";
+import { SettingsPanel } from "@/components/SettingsPanel";
 
 /**
  * Stepper UI (ZERO_TO_LAUNCH_BUILD_PLAN.md §2): paste/URL offer → Research
@@ -117,6 +119,8 @@ export default function Home() {
   const [seeded, setSeeded] = useState(false); // whether the shown run is the cached demo
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useSettings();
+  const [showSettings, setShowSettings] = useState(false);
 
   // Tick a 1s clock only while a run is in flight, to drive the elapsed/ETA
   // display. Initial `nowMs` is seeded in runAll(); the effect only owns the interval.
@@ -167,7 +171,7 @@ export default function Home() {
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, settings }),
       });
       if (!res.body) throw new Error("No response stream.");
       const reader = res.body.getReader();
@@ -268,7 +272,7 @@ export default function Home() {
       const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, model: settings.models.research }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Research failed.");
@@ -295,7 +299,7 @@ export default function Home() {
       const res = await fetch("/api/angles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief }),
+        body: JSON.stringify({ brief, model: settings.models.angles, angleCount: settings.generation.angleCount }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Angle generation failed.");
@@ -321,7 +325,7 @@ export default function Home() {
       const res = await fetch("/api/advertorial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief, angle }),
+        body: JSON.stringify({ brief, angle, model: settings.models.advertorial }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Advertorial generation failed.");
@@ -343,7 +347,7 @@ export default function Home() {
       const res = await fetch("/api/copy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief, angles }),
+        body: JSON.stringify({ brief, angles, platforms: settings.generation.defaultPlatforms, model: settings.models.copy }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Copy generation failed.");
@@ -364,7 +368,7 @@ export default function Home() {
       const res = await fetch("/api/compliance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ copy: copyToScore }),
+        body: JSON.stringify({ copy: copyToScore, strictness: settings.compliance.strictness }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Compliance scoring failed.");
@@ -405,14 +409,29 @@ export default function Home() {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-10 sm:py-14">
       <header className="mb-8">
-        <p className="text-xs font-mono uppercase tracking-widest text-neutral-500">Zero-to-Launch</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Campaign Launch Agent</h1>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-mono uppercase tracking-widest text-neutral-500">Zero-to-Launch</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Campaign Launch Agent</h1>
+          </div>
+          <button
+            onClick={() => setShowSettings((v) => !v)}
+            className="shrink-0 rounded-lg border border-neutral-500/25 px-3 py-1.5 text-sm font-medium transition hover:border-neutral-500/50"
+          >
+            ⚙ Settings
+          </button>
+        </div>
         <p className="mt-2 max-w-2xl text-sm text-neutral-500">
-          Drop in an affiliate offer. Watch the pipeline turn it into a brief, then a spread of
-          divergent marketing angles. (Copy, compliance, a live advertorial, and a ranked launch set
-          come next.)
+          Drop in an affiliate offer. Watch the pipeline turn it into a brief, divergent angles,
+          compliant per-platform copy, a live advertorial, and a ranked launch set — one orchestrated run.
         </p>
       </header>
+
+      {showSettings && (
+        <div className="mb-4">
+          <SettingsPanel settings={settings} onChange={setSettings} />
+        </div>
+      )}
 
       {/* Step 1 — offer input */}
       <Card step={1} title="The offer">

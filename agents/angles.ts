@@ -52,8 +52,8 @@ Rules:
 - Ground the rationale in the brief's audience pains/desires and the product's real USPs.
 - Keep claims within what the offer supports; the compliance stage will police specifics later.`;
 
-function buildUserMessage(brief: OfferBrief): string {
-  return `Generate the divergent angle set for this offer brief:
+function buildUserMessage(brief: OfferBrief, angleCount: number): string {
+  return `Generate the divergent angle set for this offer brief. Produce EXACTLY ${angleCount} distinct angles, each with a different hookType:
 
 ${JSON.stringify(brief, null, 2)}`;
 }
@@ -92,7 +92,7 @@ export interface AnglesOutput {
  * unparseable/empty JSON on creative multi-item requests, and a fresh
  * attempt nearly always lands.
  */
-export async function angles(brief: OfferBrief): Promise<AnglesOutput> {
+export async function angles(brief: OfferBrief, model?: string, angleCount = 6): Promise<AnglesOutput> {
   let lastError = "";
   const ATTEMPTS = 3;
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
@@ -100,13 +100,13 @@ export async function angles(brief: OfferBrief): Promise<AnglesOutput> {
       const { value, meta } = await generateJson<Angle[]>(
         [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: buildUserMessage(brief) },
+          { role: "user", content: buildUserMessage(brief, angleCount) },
         ],
         coerceAngles,
         // Higher temperature than research (we WANT creative spread), and a big
         // token budget: kimi-k2.6:cloud "thinks" before emitting the JSON, and
         // 6 angles is enough output that a tight cap truncates it mid-array.
-        { temperature: 0.8, maxTokens: 8000 },
+        { temperature: 0.8, maxTokens: 8000, model },
       );
       if (value.length > 0) return { angles: value, meta };
       lastError = "swarm returned no usable angles";

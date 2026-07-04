@@ -16,7 +16,7 @@ import type { ComplianceVerdict } from "@/agents/types";
  * blind.
  */
 export async function POST(req: Request) {
-  let body: { brief?: unknown; angles?: unknown; copy?: unknown; verdicts?: unknown; advertorialUrl?: unknown };
+  let body: { brief?: unknown; angles?: unknown; copy?: unknown; verdicts?: unknown; advertorialUrl?: unknown; model?: string; strictness?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -35,9 +35,12 @@ export async function POST(req: Request) {
   // Always (re)score the coerced copy ourselves rather than trust body.verdicts:
   // the gate is deterministic + cheap, so recomputing guarantees the verdicts
   // match the copy and can't be spoofed into inconsistent scoring.
-  const verdicts: ComplianceVerdict[] = compliance(copy);
+  const strictness = ["lenient", "standard", "strict"].includes(body.strictness as string)
+    ? (body.strictness as "lenient" | "standard" | "strict")
+    : "standard";
+  const verdicts: ComplianceVerdict[] = compliance(copy, strictness);
   const advertorialUrl = typeof body.advertorialUrl === "string" ? body.advertorialUrl : "";
 
-  const { result } = await judge({ brief, angles, copy, verdicts, advertorialUrl });
+  const { result } = await judge({ brief, angles, copy, verdicts, advertorialUrl, model: typeof body.model === "string" ? body.model : undefined });
   return NextResponse.json({ ok: true, ...result });
 }

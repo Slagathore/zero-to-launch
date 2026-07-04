@@ -100,15 +100,15 @@ export interface ResearchOutput {
   meta: GenerateResult;
 }
 
-/** Run the Research Agent over an extracted offer. */
-export async function research(offer: ExtractedOffer): Promise<ResearchOutput> {
+/** Run the Research Agent over an extracted offer. `model` overrides the stage's model. */
+export async function research(offer: ExtractedOffer, model?: string): Promise<ResearchOutput> {
   const { value, meta } = await generateJson<OfferBrief>(
     [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: buildUserMessage(offer) },
     ],
     (raw) => coerceOfferBrief(raw, offer.url),
-    { temperature: 0.3 },
+    { temperature: 0.3, model },
   );
   return { brief: value, meta };
 }

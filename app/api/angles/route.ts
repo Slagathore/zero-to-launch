@@ -12,7 +12,7 @@ import { AgentJsonError } from "@/lib/agentJson";
  * malformed shape into the swarm prompt.
  */
 export async function POST(req: Request) {
-  let body: { brief?: unknown };
+  let body: { brief?: unknown; model?: string; angleCount?: number };
   try {
     body = await req.json();
   } catch {
@@ -25,7 +25,8 @@ export async function POST(req: Request) {
 
   try {
     const brief = coerceOfferBrief(body.brief, (body.brief as { url?: string }).url ?? "");
-    const { angles: result, meta } = await angles(brief);
+    const count = Number.isFinite(body.angleCount) ? Math.min(8, Math.max(4, Number(body.angleCount))) : 6;
+    const { angles: result, meta } = await angles(brief, typeof body.model === "string" ? body.model : undefined, count);
     if (result.length === 0) {
       return NextResponse.json({ ok: false, error: "The swarm returned no usable angles. Try again." }, { status: 502 });
     }

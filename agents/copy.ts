@@ -158,7 +158,7 @@ export function coerceAdCopyList(raw: unknown): AdCopy[] {
   });
 }
 
-async function copyForPlatform(platform: Platform, brief: OfferBrief, angles: Angle[]) {
+async function copyForPlatform(platform: Platform, brief: OfferBrief, angles: Angle[], model?: string) {
   return generateJson<AdCopy[]>(
     [
       { role: "system", content: systemPrompt(platform) },
@@ -167,7 +167,7 @@ async function copyForPlatform(platform: Platform, brief: OfferBrief, angles: An
     (raw) => coerceCopyForPlatform(raw, platform, angles),
     // Generous budget: one ad per angle across several fields, on a thinking
     // model whose reasoning phase eats tokens before the JSON is emitted.
-    { temperature: 0.75, maxTokens: 8000 },
+    { temperature: 0.75, maxTokens: 8000, model },
   );
 }
 
@@ -178,12 +178,12 @@ async function copyForPlatform(platform: Platform, brief: OfferBrief, angles: An
  * result (never throws) so one flaky platform can't sink the whole stage.
  */
 async function copyForPlatformResilient(
-  platform: Platform, brief: OfferBrief, angles: Angle[],
+  platform: Platform, brief: OfferBrief, angles: Angle[], model?: string,
 ): Promise<{ copy: AdCopy[]; meta: GenerateResult | null; error?: string }> {
   let lastError = "";
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const { value, meta } = await copyForPlatform(platform, brief, angles);
+      const { value, meta } = await copyForPlatform(platform, brief, angles, model);
       if (value.length > 0) return { copy: value, meta };
       lastError = "empty copy";
     } catch (e) {
@@ -216,10 +216,11 @@ export async function copy(
   brief: OfferBrief,
   angles: Angle[],
   platforms: Platform[] = COPY_PLATFORMS,
+  model?: string,
 ): Promise<CopyOutput> {
   const forCopy = angles.slice(0, MAX_ANGLES_FOR_COPY);
   const results = await Promise.all(
-    platforms.map((platform) => copyForPlatformResilient(platform, brief, forCopy)),
+    platforms.map((platform) => copyForPlatformResilient(platform, brief, forCopy, model)),
   );
 
   const all: AdCopy[] = [];

@@ -15,7 +15,7 @@ import { AgentJsonError } from "@/lib/agentJson";
  * top-level import would 500 the route uncatchably. (Same fix as /api/run.)
  */
 export async function POST(req: Request) {
-  let body: { url?: string; text?: string };
+  let body: { url?: string; text?: string; model?: string };
   try {
     body = await req.json();
   } catch {
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   try {
     const { getOffer } = await import("@/lib/fetchOffer");
     const extraction = await getOffer({ url: body.url, text: body.text });
-    const { brief, meta } = await research(extraction);
+    const { brief, meta } = await research(extraction, typeof body.model === "string" ? body.model : undefined);
     return NextResponse.json({
       ok: true,
       brief,

@@ -312,7 +312,7 @@ export interface AdvertorialOutput {
  * biggest token budget; one retry on a no-JSON/empty reply (the S2 resilient
  * pattern), since the thinking model occasionally truncates on long output.
  */
-export async function generateAdvertorial(brief: OfferBrief, angle: Angle): Promise<AdvertorialOutput> {
+export async function generateAdvertorial(brief: OfferBrief, angle: Angle, model?: string): Promise<AdvertorialOutput> {
   let lastError = "";
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -322,7 +322,7 @@ export async function generateAdvertorial(brief: OfferBrief, angle: Angle): Prom
           { role: "user", content: buildUserMessage(brief, angle) },
         ],
         (raw) => coerceAdvertorialContent(raw, brief, angle),
-        { temperature: 0.85, maxTokens: 12000 },
+        { temperature: 0.85, maxTokens: 12000, model },
       );
       // A structurally-empty article is a failed generation, not a renderable one.
       if (content.sections.length === 0) {

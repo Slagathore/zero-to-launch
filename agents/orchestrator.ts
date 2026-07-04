@@ -7,6 +7,7 @@ import { generateAdvertorial } from "@/agents/advertorial";
 import { saveAdvertorial } from "@/lib/advertorialStore";
 import { rankAngles, judge } from "@/agents/judge";
 import { type ProgressFn, type RunInput, type RunResult, type Stage } from "@/agents/orchestrator-core";
+import { DEFAULT_SETTINGS, type Settings } from "@/lib/settings";
 
 // Re-export the jsdom-free core so existing importers keep one entry point.
 // (Routes that only need the light helpers should import orchestrator-core
@@ -35,9 +36,15 @@ export type { Stage, ProgressEvent, ProgressFn, RunInput, RunResult } from "@/ag
 
 const noop: ProgressFn = () => {};
 
-/** Run the full pipeline, emitting progress. Throws on a stage that can't
- *  recover (the route turns that into a seeded-run fallback). */
-export async function runPipeline(input: RunInput, onProgress: ProgressFn = noop): Promise<RunResult> {
+/** Run the full pipeline, emitting progress. `settings` routes each stage's
+ *  model + controls angle count / platforms / compliance strictness. Throws on
+ *  a stage that can't recover (the route turns that into a seeded-run fallback). */
+export async function runPipeline(
+  input: RunInput,
+  onProgress: ProgressFn = noop,
+  settings: Settings = DEFAULT_SETTINGS,
+): Promise<RunResult> {
+  const m = settings.models;
   async function stage<T>(name: Stage, fn: () => Promise<T> | T): Promise<T> {
     await onProgress({ stage: name, status: "start" });
     try {
@@ -53,19 +60,19 @@ export async function runPipeline(input: RunInput, onProgress: ProgressFn = noop
 
   const brief = await stage("research", async () => {
     const offer = await getOffer({ url: input.url, text: input.text });
-    return (await research(offer)).brief;
+    return (await research(offer, m.research)).brief;
   });
 
-  const angles = await stage("angles", async () => (await generateAngles(brief)).angles);
+  const angles = await stage("angles", async () => (await generateAngles(brief, m.angles, settings.generation.angleCount)).angles);
 
-  const copy = await stage("copy", async () => (await generateCopy(brief, angles)).copy);
+  const copy = await stage("copy", async () => (await generateCopy(brief, angles, settings.generation.defaultPlatforms, m.copy)).copy);
 
-  const verdicts = await stage("compliance", () => compliance(copy));
+  const verdicts = await stage("compliance", () => compliance(copy, settings.compliance.strictness));
 
   const { slug, url, angleId } = await stage("advertorial", async () => {
     const ranking = rankAngles(angles, copy, verdicts);
     const topAngle = angles.find((a) => a.id === ranking[0]?.angleId) ?? angles[0];
-    const { advertorial, content } = await generateAdvertorial(brief, topAngle);
+    const { advertorial, content } = await generateAdvertorial(brief, topAngle, m.advertorial);
     await saveAdvertorial({
       advertorial,
       content,
@@ -76,7 +83,7 @@ export async function runPipeline(input: RunInput, onProgress: ProgressFn = noop
   });
 
   const judgeResult = await stage("judge", async () => {
-    const { result } = await judge({ brief, angles, copy, verdicts, advertorialUrl: url });
+    const { result } = await judge({ brief, angles, copy, verdicts, advertorialUrl: url, model: m.judge });
     return result;
   });
 

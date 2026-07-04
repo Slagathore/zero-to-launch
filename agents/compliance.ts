@@ -105,19 +105,32 @@ function copyText(copy: AdCopy): string {
   return [copy.headline, copy.primaryText, copy.description].filter(Boolean).join("  •  ");
 }
 
+export type Strictness = "lenient" | "standard" | "strict";
+
+/** Apply the operator's strictness to a raw status. The rules + violations are
+ *  unchanged (still reported); only the launch-blocking verdict shifts:
+ *   - strict: flags are treated as hard blocks.
+ *   - lenient: flags are tolerated (pass); only true blocks block.
+ *   - standard: as detected. */
+function applyStrictness(status: ComplianceVerdict["status"], strictness: Strictness): ComplianceVerdict["status"] {
+  if (strictness === "strict") return status === "pass" ? "pass" : "block";
+  if (strictness === "lenient") return status === "block" ? "block" : "pass";
+  return status;
+}
+
 /** Evaluate a single ad into a ComplianceVerdict. */
-export function evaluateCopy(copy: AdCopy): ComplianceVerdict {
+export function evaluateCopy(copy: AdCopy, strictness: Strictness = "standard"): ComplianceVerdict {
   const violations = evaluateText(copyText(copy), copy.platform);
-  const status = violations.reduce<ComplianceVerdict["status"]>(
+  const raw = violations.reduce<ComplianceVerdict["status"]>(
     (acc, v) => worse(acc, v.severity === "block" ? "block" : "flag"),
     "pass",
   );
-  return { angleId: copy.angleId, platform: copy.platform, status, violations };
+  return { angleId: copy.angleId, platform: copy.platform, status: applyStrictness(raw, strictness), violations };
 }
 
 /** Score a batch of ads. Pure + synchronous — no network, no model. */
-export function compliance(copies: AdCopy[]): ComplianceVerdict[] {
-  return copies.map(evaluateCopy);
+export function compliance(copies: AdCopy[], strictness: Strictness = "standard"): ComplianceVerdict[] {
+  return copies.map((c) => evaluateCopy(c, strictness));
 }
 
 export interface ComplianceSummary {

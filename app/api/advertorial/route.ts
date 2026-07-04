@@ -14,7 +14,7 @@ import { AgentJsonError } from "@/lib/agentJson";
  * pattern) so replayed/hand-edited payloads can't inject malformed shapes.
  */
 export async function POST(req: Request) {
-  let body: { brief?: unknown; angle?: unknown };
+  let body: { brief?: unknown; angle?: unknown; model?: string };
   try {
     body = await req.json();
   } catch {
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
   try {
     const brief = coerceOfferBrief(body.brief, (body.brief as { url?: string }).url ?? "");
-    const { advertorial, content, meta } = await generateAdvertorial(brief, angle);
+    const { advertorial, content, meta } = await generateAdvertorial(brief, angle, typeof body.model === "string" ? body.model : undefined);
     await saveAdvertorial({
       advertorial,
       content,

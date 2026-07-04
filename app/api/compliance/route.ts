@@ -11,7 +11,7 @@ import { coerceAdCopyList } from "@/agents/copy";
  * replayed/hand-edited payload can't break the scorer.
  */
 export async function POST(req: Request) {
-  let body: { copy?: unknown };
+  let body: { copy?: unknown; strictness?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -23,7 +23,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "No copy to score. Generate copy first." }, { status: 400 });
   }
 
-  const verdicts = compliance(copies);
+  const strictness = ["lenient", "standard", "strict"].includes(body.strictness as string)
+    ? (body.strictness as "lenient" | "standard" | "strict")
+    : "standard";
+  const verdicts = compliance(copies, strictness);
   return NextResponse.json({
     ok: true,
     verdicts,

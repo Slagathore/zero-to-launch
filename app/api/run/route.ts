@@ -23,7 +23,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  let body: { url?: string; text?: string; seeded?: boolean } = {};
+  let body: { url?: string; text?: string; seeded?: boolean; settings?: unknown } = {};
   try {
     body = await req.json();
   } catch {
@@ -72,10 +72,14 @@ export async function POST(req: Request) {
         } else if (!body.url && !body.text) {
           await replaySeeded("No offer provided — showing a cached demo run.");
         } else {
-          const { runPipeline } = await import("@/agents/orchestrator");
+          const [{ runPipeline }, { coerceSettings }] = await Promise.all([
+            import("@/agents/orchestrator"),
+            import("@/lib/settings"),
+          ]);
           const result: RunResult = await runPipeline(
             { url: body.url, text: body.text },
             (event) => send({ type: "progress", event }),
+            coerceSettings(body.settings),
           );
           send({ type: "complete", result });
         }
