@@ -62,7 +62,7 @@ export async function runPipeline(input: RunInput, onProgress: ProgressFn = noop
 
   const verdicts = await stage("compliance", () => compliance(copy));
 
-  const { slug, url } = await stage("advertorial", async () => {
+  const { slug, url, angleId } = await stage("advertorial", async () => {
     const ranking = rankAngles(angles, copy, verdicts);
     const topAngle = angles.find((a) => a.id === ranking[0]?.angleId) ?? angles[0];
     const { advertorial, content } = await generateAdvertorial(brief, topAngle);
@@ -72,7 +72,7 @@ export async function runPipeline(input: RunInput, onProgress: ProgressFn = noop
       offer: { product: brief.product, vertical: brief.vertical, url: brief.url },
       createdAt: new Date().toISOString(),
     });
-    return { slug: advertorial.slug, url: `/p/${advertorial.slug}` };
+    return { slug: advertorial.slug, url: `/p/${advertorial.slug}`, angleId: topAngle.id };
   });
 
   const judgeResult = await stage("judge", async () => {
@@ -80,5 +80,5 @@ export async function runPipeline(input: RunInput, onProgress: ProgressFn = noop
     return result;
   });
 
-  return { brief, angles, copy, verdicts, advertorialSlug: slug, advertorialUrl: url, judge: judgeResult };
+  return { brief, angles, copy, verdicts, advertorialSlug: slug, advertorialUrl: url, advertorialAngleId: angleId, judge: judgeResult };
 }

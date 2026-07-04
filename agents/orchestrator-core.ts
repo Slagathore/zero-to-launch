@@ -39,6 +39,7 @@ export interface RunResult {
   verdicts: ComplianceVerdict[];
   advertorialSlug: string;
   advertorialUrl: string;
+  advertorialAngleId: string; // which angle the auto-generated advertorial is for
   judge: JudgeResult;
 }
 
@@ -51,7 +52,7 @@ export function stageDataFromResult(r: RunResult, stage: Stage): unknown {
     case "angles": return r.angles;
     case "copy": return r.copy;
     case "compliance": return r.verdicts;
-    case "advertorial": return { slug: r.advertorialSlug, url: r.advertorialUrl };
+    case "advertorial": return { slug: r.advertorialSlug, url: r.advertorialUrl, angleId: r.advertorialAngleId };
     case "judge": return r.judge;
   }
 }

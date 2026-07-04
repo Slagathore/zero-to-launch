@@ -8,6 +8,7 @@ const result: RunResult = {
   verdicts: [{ angleId: "a1", platform: "meta", status: "pass", violations: [] }],
   advertorialSlug: "p-curiosity-ab12",
   advertorialUrl: "/p/p-curiosity-ab12",
+  advertorialAngleId: "a1",
   judge: {
     ranking: [], rationale: "r", rationaleSource: "heuristic",
     launchPackage: { offerBrief: { url: "https://x", vertical: "v", product: "P", audience: { who: "", painPoints: [], desires: [] }, usps: [], claimsDetected: [], complianceRisk: "low", notes: "" }, recommendedAngles: [], copy: [], advertorialUrl: "/p/p-curiosity-ab12", checklist: [] },
@@ -21,7 +22,7 @@ describe("stageDataFromResult", () => {
     expect(stageDataFromResult(result, "angles")).toBe(result.angles);
     expect(stageDataFromResult(result, "copy")).toBe(result.copy);
     expect(stageDataFromResult(result, "compliance")).toBe(result.verdicts);
-    expect(stageDataFromResult(result, "advertorial")).toEqual({ slug: "p-curiosity-ab12", url: "/p/p-curiosity-ab12" });
+    expect(stageDataFromResult(result, "advertorial")).toEqual({ slug: "p-curiosity-ab12", url: "/p/p-curiosity-ab12", angleId: "a1" });
     expect(stageDataFromResult(result, "judge")).toBe(result.judge);
   });
 });

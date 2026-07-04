@@ -45,6 +45,7 @@ interface RunResultLike {
   verdicts: ComplianceVerdict[];
   advertorialUrl: string;
   advertorialSlug: string;
+  advertorialAngleId: string;
   judge: JudgeResult;
 }
 
@@ -96,7 +97,8 @@ export default function Home() {
   const [researchMeta, setResearchMeta] = useState<RunMeta | null>(null);
   const [anglesMeta, setAnglesMeta] = useState<RunMeta | null>(null);
   const [copyMeta, setCopyMeta] = useState<RunMeta | null>(null);
-  const [advertorialUrl, setAdvertorialUrl] = useState<string | null>(null);
+  // Advertorials are generated per angle, on demand — angleId -> live /p/ url.
+  const [advertorialUrls, setAdvertorialUrls] = useState<Record<string, string>>({});
   const [advertorialMeta, setAdvertorialMeta] = useState<RunMeta | null>(null);
   const [advertorialAngleId, setAdvertorialAngleId] = useState<string>("");
   const [judgeResult, setJudgeResult] = useState<JudgeResult | null>(null);
@@ -112,6 +114,7 @@ export default function Home() {
   const [stageStartMs, setStageStartMs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(0);
   const [seeded, setSeeded] = useState(false); // whether the shown run is the cached demo
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Tick a 1s clock only while a run is in flight, to drive the elapsed/ETA
@@ -136,7 +139,7 @@ export default function Home() {
     clearCopyAndDownstream();
     setResearchMeta(null);
     setAnglesMeta(null);
-    setAdvertorialUrl(null);
+    setAdvertorialUrls({});
     setAdvertorialMeta(null);
     setAdvertorialAngleId("");
     setJudgeResult(null);
@@ -218,9 +221,11 @@ export default function Home() {
       setCopy(r.copy);
       setVerdicts(r.verdicts);
       setComplianceSummary(summarizeVerdicts(r.verdicts));
-      setAdvertorialUrl(r.advertorialUrl);
+      if (r.advertorialAngleId && r.advertorialUrl) {
+        setAdvertorialUrls((prev) => ({ ...prev, [r.advertorialAngleId]: r.advertorialUrl }));
+        setAdvertorialAngleId(r.advertorialAngleId); // pre-select the generated (top) one
+      }
       setJudgeResult(r.judge);
-      if (r.angles[0]?.id) setAdvertorialAngleId(r.angles[0].id);
       setDoneStages([...RUN_STAGES]);
       setRunStage(null);
     }
@@ -242,7 +247,14 @@ export default function Home() {
         setComplianceSummary(summarizeVerdicts(v));
         break;
       }
-      case "advertorial": setAdvertorialUrl((data as { url: string }).url); break;
+      case "advertorial": {
+        const d = data as { url: string; angleId: string };
+        if (d.angleId && d.url) {
+          setAdvertorialUrls((prev) => ({ ...prev, [d.angleId]: d.url }));
+          setAdvertorialAngleId(d.angleId); // pre-select the generated (top) one
+        }
+        break;
+      }
       case "judge": setJudgeResult(data as JudgeResult); break;
     }
   }
@@ -275,7 +287,7 @@ export default function Home() {
     setSeeded(false); // a manual regeneration is always a live model call
     // Regenerating angles invalidates any copy/advertorial made for the old set.
     clearCopyAndDownstream();
-    setAdvertorialUrl(null);
+    setAdvertorialUrls({});
     setAdvertorialMeta(null);
     setAdvertorialAngleId("");
     try {
@@ -312,7 +324,7 @@ export default function Home() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Advertorial generation failed.");
-      setAdvertorialUrl(data.url);
+      setAdvertorialUrls((prev) => ({ ...prev, [angle.id]: data.url }));
       setAdvertorialMeta(data.meta);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -604,50 +616,79 @@ export default function Home() {
       )}
 
       {/* Step 5 — the live advertorial pre-lander */}
-      {angles && angles.length > 0 && (
-        <Card step={5} title="Advertorial pre-lander">
-          <p className="mb-3 text-sm text-neutral-500">
-            Develop one angle into a full, FTC-labeled advertorial — served live on this site.
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <select
-              value={advertorialAngleId}
-              onChange={(e) => setAdvertorialAngleId(e.target.value)}
-              className="rounded-lg border border-neutral-500/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500/50"
-            >
-              {angles.map((a) => (
-                <option key={a.id} value={a.id}>
-                  [{a.hookType}] {a.headlineSeed}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={runAdvertorial}
-              disabled={advertorialLoading || running}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-            >
-              {advertorialLoading ? "Writing advertorial…" : "Generate advertorial"}
-            </button>
-            {advertorialMeta && <MetaTag meta={advertorialMeta} />}
-          </div>
+      {angles && angles.length > 0 && (() => {
+        // Order the angles by the Judge's ranking when we have it (generated one
+        // first), else keep swarm order. Each option shows its compliance status
+        // and whether its advertorial has been generated.
+        const ordered = orderAnglesByRanking(angles, judgeResult);
+        const selectedUrl = advertorialUrls[advertorialAngleId];
+        const selectedGenerated = !!selectedUrl;
+        return (
+          <Card step={5} title="Advertorial pre-lander">
+            <p className="mb-3 text-sm text-neutral-500">
+              The pipeline auto-builds the advertorial for the top-ranked angle. Pick any other angle
+              to generate its own — each is a full, FTC-labeled page served live on this site.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={advertorialAngleId}
+                onChange={(e) => setAdvertorialAngleId(e.target.value)}
+                disabled={advertorialLoading || running}
+                className="max-w-full rounded-lg border border-neutral-500/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500/50 disabled:opacity-50"
+              >
+                {ordered.map((a) => {
+                  const status = angleStatus(a.id, verdicts);
+                  const gen = !!advertorialUrls[a.id];
+                  const tags = [
+                    gen ? "✓ generated" : null,
+                    status === "block" ? "⚠ failed compliance" : status === "flag" ? "flagged" : null,
+                  ].filter(Boolean).join(" · ");
+                  return (
+                    <option key={a.id} value={a.id}>
+                      [{a.hookType}] {a.headlineSeed}{tags ? `  — ${tags}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
 
-          {advertorialUrl && (
-            <a
-              href={advertorialUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 transition hover:bg-emerald-500/15"
-            >
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                Live advertorial ready — click to open the real page
-              </span>
-              <span className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white">
+              {/* Generate: only when the selected angle has no advertorial yet. */}
+              {!selectedGenerated && (
+                <button
+                  onClick={runAdvertorial}
+                  disabled={advertorialLoading || running}
+                  className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                >
+                  {advertorialLoading ? "Writing advertorial…" : "Generate advertorial"}
+                </button>
+              )}
+
+              {/* Open: interactive only when the SELECTED angle is generated. */}
+              <a
+                href={selectedUrl || undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-disabled={!selectedGenerated}
+                onClick={(e) => { if (!selectedGenerated) e.preventDefault(); }}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  selectedGenerated
+                    ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                    : "cursor-not-allowed bg-neutral-500/15 text-neutral-400"
+                }`}
+              >
                 Open ↗
-              </span>
-            </a>
-          )}
-        </Card>
-      )}
+              </a>
+              {advertorialMeta && <MetaTag meta={advertorialMeta} />}
+            </div>
+
+            {angleStatus(advertorialAngleId, verdicts) === "block" && !selectedGenerated && (
+              <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">
+                Heads up — this angle’s copy failed compliance (a BLOCK). You can still generate its
+                advertorial, but fix the flagged copy before spending on it.
+              </p>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* Step 6 — the Judge's ranked recommendation + launch package */}
       {judgeResult && (
@@ -679,16 +720,34 @@ export default function Home() {
 
           <ListField label="Launch checklist" items={judgeResult.launchPackage.checklist} />
 
-          {judgeResult.launchPackage.advertorialUrl && (
-            <a
-              href={judgeResult.launchPackage.advertorialUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-neutral-500/15 pt-4">
+            <button
+              onClick={() => exportLaunchPackage(judgeResult.launchPackage)}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
-              Open the recommended advertorial ↗
-            </a>
-          )}
+              ⬇ Export launch package
+            </button>
+            <button
+              onClick={() => copyLaunchPackage(judgeResult.launchPackage, setCopied)}
+              className="rounded-lg border border-neutral-500/30 px-4 py-2 text-sm font-medium transition hover:border-neutral-500/60"
+            >
+              {copied ? "Copied ✓" : "Copy as text"}
+            </button>
+            {judgeResult.launchPackage.advertorialUrl && (
+              <a
+                href={judgeResult.launchPackage.advertorialUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-emerald-700 underline underline-offset-2 dark:text-emerald-400"
+              >
+                Open the recommended advertorial ↗
+              </a>
+            )}
+            <span className="w-full text-xs text-neutral-500">
+              The launch package (brief · recommended angles · their copy · advertorial URL · checklist)
+              is the deliverable you hand to your ad tools — export it as JSON or copy it.
+            </span>
+          </div>
         </Card>
       )}
     </main>
@@ -716,6 +775,70 @@ function groupByPlatform(copy: AdCopy[]): [Platform, AdCopy[]][] {
 /** Look up the hook type of the angle a piece of copy was written for. */
 function hookFor(angles: Angle[], angleId: string): string {
   return angles.find((a) => a.id === angleId)?.hookType ?? "angle";
+}
+
+/** Order angles by the Judge's ranking (best first) when available, else keep
+ *  swarm order. Any angle missing from the ranking is appended. */
+function orderAnglesByRanking(angles: Angle[], judge: JudgeResult | null): Angle[] {
+  if (!judge?.ranking?.length) return angles;
+  const byId = new Map(angles.map((a) => [a.id, a]));
+  const ordered: Angle[] = [];
+  const seen = new Set<string>();
+  for (const r of judge.ranking) {
+    const a = byId.get(r.angleId);
+    if (a && !seen.has(a.id)) { ordered.push(a); seen.add(a.id); }
+  }
+  for (const a of angles) if (!seen.has(a.id)) ordered.push(a);
+  return ordered;
+}
+
+/** Worst compliance status across an angle's copy ("pass" when it has none). */
+function angleStatus(angleId: string, verdicts: ComplianceVerdict[] | null): ComplianceVerdict["status"] {
+  const rank = { pass: 0, flag: 1, block: 2 } as const;
+  let worst: ComplianceVerdict["status"] = "pass";
+  for (const v of verdicts ?? []) {
+    if (v.angleId === angleId && rank[v.status] > rank[worst]) worst = v.status;
+  }
+  return worst;
+}
+
+type LaunchPackageT = JudgeResult["launchPackage"];
+
+/** Download the launch package as a JSON file — the deliverable for ad tools. */
+function exportLaunchPackage(lp: LaunchPackageT) {
+  const blob = new Blob([JSON.stringify(lp, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const slug = (lp.offerBrief.product || "offer").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "launch";
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `launch-package-${slug}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Copy the launch package as readable text to the clipboard. */
+async function copyLaunchPackage(lp: LaunchPackageT, setCopied: (v: boolean) => void) {
+  const lines: string[] = [];
+  lines.push(`LAUNCH PACKAGE — ${lp.offerBrief.product} (${lp.offerBrief.vertical})`, "");
+  lines.push("RECOMMENDED ANGLES:");
+  for (const a of lp.recommendedAngles) lines.push(`  • [${a.hookType}] ${a.headlineSeed} — ${a.promise}`);
+  lines.push("", "AD COPY:");
+  for (const c of lp.copy) {
+    lines.push(`  [${c.platform}] ${c.headline}`);
+    lines.push(`    ${c.primaryText}${c.description ? `  (${c.description})` : ""}  → ${c.cta}`);
+  }
+  if (lp.advertorialUrl) lines.push("", `ADVERTORIAL: ${lp.advertorialUrl}`);
+  lines.push("", "LAUNCH CHECKLIST:");
+  for (const item of lp.checklist) lines.push(`  ☐ ${item}`);
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  } catch {
+    /* clipboard blocked — no-op */
+  }
 }
 
 function VerdictPill({ status, count }: { status: ComplianceVerdict["status"]; count: number }) {

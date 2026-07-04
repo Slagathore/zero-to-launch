@@ -1,0 +1,97 @@
+{
+  "advertorial": {
+    "angleId": "angle-1",
+    "slug": "flowdesk-identity-6ncx",
+    "html": "<div class=\"advertorial-page\">\n<style>\n  .advertorial-page{--ink:#16181d;--muted:#5b6068;--accent:#b3223a;--accent-dark:#951c30;--paper:#f7f5f2;--rule:#e4e1db;\n    font-family:Georgia,'Times New Roman',serif;color:var(--ink);background:#fff;line-height:1.7;-webkit-font-smoothing:antialiased}\n  .advertorial-page *{margin:0;padding:0;box-sizing:border-box}\n  .advertorial-page ::selection{background:var(--accent);color:#fff}\n  .ftc-banner{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--ink);color:#fff;\n    font-size:.72rem;letter-spacing:.02em;text-align:center;padding:.55rem 1rem;line-height:1.45}\n  .masthead{text-align:center;border-bottom:3px double var(--rule);padding:1.4rem 1rem 1.1rem}\n  .masthead .wordmark{font-family:Georgia,serif;font-weight:700;font-size:1.35rem;letter-spacing:.35em;text-transform:uppercase}\n  .masthead .tagline{font-family:system-ui,sans-serif;font-size:.7rem;letter-spacing:.28em;text-transform:uppercase;color:var(--accent);margin-top:.35rem}\n  .wrap{max-width:680px;margin:0 auto;padding:2.2rem 1.4rem 3rem}\n  .advertorial-page h1{font-size:clamp(1.9rem,4.6vw,2.85rem);line-height:1.13;letter-spacing:-.015em;font-weight:800;margin-bottom:.9rem}\n  .deck{font-size:1.22rem;line-height:1.5;color:var(--muted);font-style:italic;margin-bottom:1.4rem}\n  .byline{font-family:system-ui,sans-serif;font-size:.8rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:.45rem;\n    align-items:center;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:.7rem 0;margin-bottom:1.9rem}\n  .byline .spon{background:var(--accent);color:#fff;font-weight:700;font-size:.62rem;letter-spacing:.08em;\n    text-transform:uppercase;padding:.18rem .5rem;border-radius:3px}\n  .advertorial-page p{font-size:1.075rem;margin-bottom:1.15rem}\n  .advertorial-page p.lede::first-letter{font-size:3.2em;font-weight:800;float:left;line-height:.85;\n    padding:.06em .12em 0 0;color:var(--accent)}\n  .advertorial-page h2{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:1.3rem;font-weight:800;\n    letter-spacing:-.01em;margin:1.9rem 0 .85rem}\n  blockquote.pull{font-size:1.35rem;line-height:1.45;font-style:italic;font-weight:600;color:var(--ink);\n    border-left:4px solid var(--accent);padding:.35rem 0 .35rem 1.15rem;margin:1.7rem 0}\n  .benefits{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:1.25rem 1.4rem;margin:1.6rem 0}\n  .benefits .bullets-title{font-family:system-ui,sans-serif;font-weight:700;font-size:1rem;margin-bottom:.6rem}\n  .benefits ul{list-style:none}\n  .benefits li{font-size:1.03rem;padding-left:1.6em;position:relative;margin-bottom:.55rem}\n  .benefits li::before{content:'\\2713';position:absolute;left:.15em;color:var(--accent);font-weight:800;font-family:system-ui,sans-serif}\n  .cta-block{text-align:center;margin:2rem 0;padding:1.6rem 1.2rem;background:var(--paper);border:1px solid var(--rule);border-radius:14px}\n  .cta-lead{font-family:system-ui,sans-serif;font-weight:600;font-size:1rem;margin-bottom: .9rem}\n  .cta-btn{display:inline-block;font-family:system-ui,sans-serif;font-weight:800;font-size:1.06rem;color:#fff;\n    background:var(--accent);text-decoration:none;padding:.85rem 2.1rem;border-radius:10px;\n    box-shadow:0 3px 10px rgba(179,34,58,.28);transition:background .15s}\n  .cta-btn:hover{background:var(--accent-dark)}\n  .ftc-footer{border-top:1px solid var(--rule);margin-top:2.4rem;padding-top:1.1rem}\n  .ftc-footer p{font-family:system-ui,sans-serif;font-size:.74rem;line-height:1.55;color:var(--muted);margin-bottom:.5rem}\n  @media (max-width:520px){.wrap{padding:1.6rem 1.1rem 2.2rem}.advertorial-page p{font-size:1.02rem}}\n</style>\n<div class=\"ftc-banner\">PAID ADVERTISEMENT — This is sponsored content, not a news article. The publisher may earn a commission from purchases made through links on this page.</div>\n<header class=\"masthead\">\n  <div class=\"wordmark\">The Daily Angle</div>\n  <div class=\"tagline\">Sponsored Feature</div>\n</header>\n<article class=\"wrap\">\n  <h1>If Todoist Makes You Feel Like a Failure, This Is Your App</h1>\n  <p class=\"deck\">A quiet, offline-first focus timer built for people who&#39;ve had enough of guilt-driven productivity culture.</p>\n  <div class=\"byline\">\n    <span class=\"spon\">Sponsored</span>\n    <span>By Productivity Desk</span>\n    <span>&middot;</span>\n    <span>July 3, 2026</span>\n    <span>&middot;</span>\n    <span>3 min read</span>\n  </div>\n<p class=\"lede\">You delete the app at 11:47 p.m., the night before your weekly review. Another broken streak. Another red badge of shame sitting in your dock, reminding you that you &quot;failed&quot; four days this week. You told yourself you&#39;d stay consistent. The app told you consistency was everything.</p>\n<p>Somewhere along the way, productivity became performative. Streaks. Leaderboards. Confetti explosions for checking off tasks. It&#39;s exhausting—and if you&#39;ve ever felt worse after using a productivity tool than before you opened it, you&#39;re not alone.</p>\n<h2>The Hidden Cost of Gamified Focus</h2>\n<p>The productivity industry discovered something potent: guilt works. Miss a day, lose your streak. Fall behind, watch your avatar stagnate. These mechanics were borrowed from slot machines and social media, not from anyone&#39;s actual workflow.</p>\n<p>For knowledge workers and creatives, the result is paradoxical. You&#39;re supposed to be calming your mind for deep work. Instead, you&#39;re managing anxiety about an app that&#39;s supposed to reduce anxiety. The tool becomes the task.</p>\n<p>Privacy adds another layer of unease. Where does your focus data live? Who&#39;s building a profile of your work habits? The cloud-based defaults of most tools mean your attention patterns are someone else&#39;s dataset.</p>\n<h2>What Happened When I Tried the Opposite</h2>\n<p>I found FlowDesk through a comment thread—someone describing it as &quot;the focus app for people who hate productivity apps.&quot; No onboarding celebration. No tutorial gamification. Just a small, calm window that asked one thing: how long do you want to focus?</p>\n<p>The difference was immediate. One-click sessions. Optional site blocking that actually works without configuring blocklists for twenty minutes. No account to create, no streak to protect, no leaderboard suggesting I&#39;m somehow competing with strangers.</p>\n<blockquote class=\"pull\">&quot;No streaks to guilt you. No gamified nonsense. Your data stays on your machine.&quot;</blockquote>\n<p>Everything lives locally. Your sessions, your patterns, your data—it doesn&#39;t leave your machine. The weekly recap arrives gently: here&#39;s how you spent your time, if you&#39;re curious. No comparisons. No &quot;you were 23% less focused than last week.&quot;</p>\n<h2>What Calm Productivity Actually Looks Like</h2>\n<div class=\"benefits\"><p class=\"bullets-title\">What FlowDesk does differently:</p><ul><li>Anti-pressure design: No streaks, points, or guilt-based motivation—just structured quiet for your work</li><li>True offline privacy: All data stored locally on your machine, with no cloud account required</li><li>Minimal friction: One-click focus sessions that start before you can second-guess yourself</li><li>Gentle weekly insights: Calm recaps without aggressive analytics or productivity scores</li><li>Native simplicity: A focused desktop experience without the bloat of multi-platform feature creep</li></ul></div>\n<p>Many users report finding themselves in longer, more natural focus sessions—not because they&#39;re chasing a reward, but because the tool finally gets out of the way. Some mention using it specifically during anxious periods when traditional productivity apps made them feel worse.</p>\n<p>The common thread in feedback is relief. Relief at not being measured. Relief at not being compared. Relief at opening a tool and feeling, for once, like the design respects your mental space rather than exploiting it.</p>\n<div class=\"cta-block\"><p class=\"cta-lead\">Try a calmer way to work—your first session takes ten seconds.</p><a class=\"cta-btn\" href=\"#\" rel=\"nofollow sponsored\">Start Focusing Simply</a></div>\n  <footer class=\"ftc-footer\"><p>PAID ADVERTISEMENT — This is sponsored content, not a news article. The publisher may earn a commission from purchases made through links on this page.</p><p>Results are not typical; individual results vary.</p><p>Results may vary; FlowDesk is a focus tool and does not treat or diagnose any condition.</p><p>This article is sponsored content written for FlowDesk.</p></footer>\n</article>\n</div>",
+    "ftcDisclosure": "PAID ADVERTISEMENT — This is sponsored content, not a news article. The publisher may earn a commission from purchases made through links on this page. Results are not typical; individual results vary. Results may vary; FlowDesk is a focus tool and does not treat or diagnose any condition. This article is sponsored content written for FlowDesk."
+  },
+  "content": {
+    "headline": "If Todoist Makes You Feel Like a Failure, This Is Your App",
+    "deck": "A quiet, offline-first focus timer built for people who've had enough of guilt-driven productivity culture.",
+    "authorLabel": "Productivity Desk",
+    "sections": [
+      {
+        "type": "paragraph",
+        "text": "You delete the app at 11:47 p.m., the night before your weekly review. Another broken streak. Another red badge of shame sitting in your dock, reminding you that you \"failed\" four days this week. You told yourself you'd stay consistent. The app told you consistency was everything."
+      },
+      {
+        "type": "paragraph",
+        "text": "Somewhere along the way, productivity became performative. Streaks. Leaderboards. Confetti explosions for checking off tasks. It's exhausting—and if you've ever felt worse after using a productivity tool than before you opened it, you're not alone."
+      },
+      {
+        "type": "heading",
+        "text": "The Hidden Cost of Gamified Focus"
+      },
+      {
+        "type": "paragraph",
+        "text": "The productivity industry discovered something potent: guilt works. Miss a day, lose your streak. Fall behind, watch your avatar stagnate. These mechanics were borrowed from slot machines and social media, not from anyone's actual workflow."
+      },
+      {
+        "type": "paragraph",
+        "text": "For knowledge workers and creatives, the result is paradoxical. You're supposed to be calming your mind for deep work. Instead, you're managing anxiety about an app that's supposed to reduce anxiety. The tool becomes the task."
+      },
+      {
+        "type": "paragraph",
+        "text": "Privacy adds another layer of unease. Where does your focus data live? Who's building a profile of your work habits? The cloud-based defaults of most tools mean your attention patterns are someone else's dataset."
+      },
+      {
+        "type": "heading",
+        "text": "What Happened When I Tried the Opposite"
+      },
+      {
+        "type": "paragraph",
+        "text": "I found FlowDesk through a comment thread—someone describing it as \"the focus app for people who hate productivity apps.\" No onboarding celebration. No tutorial gamification. Just a small, calm window that asked one thing: how long do you want to focus?"
+      },
+      {
+        "type": "paragraph",
+        "text": "The difference was immediate. One-click sessions. Optional site blocking that actually works without configuring blocklists for twenty minutes. No account to create, no streak to protect, no leaderboard suggesting I'm somehow competing with strangers."
+      },
+      {
+        "type": "pullquote",
+        "text": "\"No streaks to guilt you. No gamified nonsense. Your data stays on your machine.\""
+      },
+      {
+        "type": "paragraph",
+        "text": "Everything lives locally. Your sessions, your patterns, your data—it doesn't leave your machine. The weekly recap arrives gently: here's how you spent your time, if you're curious. No comparisons. No \"you were 23% less focused than last week.\""
+      },
+      {
+        "type": "heading",
+        "text": "What Calm Productivity Actually Looks Like"
+      },
+      {
+        "type": "bullets",
+        "text": "What FlowDesk does differently:",
+        "items": [
+          "Anti-pressure design: No streaks, points, or guilt-based motivation—just structured quiet for your work",
+          "True offline privacy: All data stored locally on your machine, with no cloud account required",
+          "Minimal friction: One-click focus sessions that start before you can second-guess yourself",
+          "Gentle weekly insights: Calm recaps without aggressive analytics or productivity scores",
+          "Native simplicity: A focused desktop experience without the bloat of multi-platform feature creep"
+        ]
+      },
+      {
+        "type": "paragraph",
+        "text": "Many users report finding themselves in longer, more natural focus sessions—not because they're chasing a reward, but because the tool finally gets out of the way. Some mention using it specifically during anxious periods when traditional productivity apps made them feel worse."
+      },
+      {
+        "type": "paragraph",
+        "text": "The common thread in feedback is relief. Relief at not being measured. Relief at not being compared. Relief at opening a tool and feeling, for once, like the design respects your mental space rather than exploiting it."
+      },
+      {
+        "type": "cta",
+        "text": "Try a calmer way to work—your first session takes ten seconds."
+      }
+    ],
+    "ctaText": "Start Focusing Simply",
+    "disclaimerNotes": [
+      "Results may vary; FlowDesk is a focus tool and does not treat or diagnose any condition.",
+      "This article is sponsored content written for FlowDesk."
+    ]
+  },
+  "offer": {
+    "product": "FlowDesk",
+    "vertical": "productivity software / focus timer app",
+    "url": ""
+  },
+  "createdAt": "2026-07-04T02:53:49.207Z"
+}
