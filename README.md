@@ -75,13 +75,23 @@ Two design decisions matter for trust:
 Every agent is a typed `input to output` module behind a fixed contract, so a new agent plugs into
 the same pipeline without touching the rest.
 
+- **Creative image generation**: mock up the ad visuals for each angle, so the package ships imagery a
+  buyer can drop into a placement, not just copy and a pre-lander. The angle and its hook already
+  exist in the pipeline, so feeding them into image generation is the next artifact.
+- **Learn from the advertiser's own history**: let a company upload past campaigns with their real
+  metrics, and use that as a signal so the Angle Swarm and Copy stages lean toward what has converted
+  for them, in their voice and their vertical.
+- **An adversarial critic**: a model whose only job is to attack each angle, ad, and advertorial
+  before the Judge sees it (poke the claims, flag the weak CTA), so the output has to survive real
+  criticism.
+- **Competitor intelligence at copy time**: when writing copy, semantically pull what competitors are
+  already running for similar offers, so each angle is written with the live landscape in view rather
+  than blind to it.
 - **Compliance Gate v2**: replace the curated ruleset with a live policy-RAG over the full Meta,
   Google, TikTok, Taboola, and FTC corpora. The interface stays the same; only the implementation
   changes. The current 22 rules are a curated subset, not the full policy.
 - **Native Placement Optimizer**: after launch, ingest Taboola and Outbrain placement data, flag
   money-losing widgets, and recommend blacklists with projected savings.
-- **Creative Fatigue Radar**: track per-creative CTR and CVR decay and generate fresh variants of the
-  winners before they drop off.
 - **Closed loop**: feed live performance back into the Angle Swarm so it can weight angles by what
   converts for a given vertical.
 
@@ -161,3 +171,8 @@ run all work there with no backend.
   always-on Vercel deploy serves the deterministic and seeded demos.
 - Generated advertorials on Vercel live in the serverless instance's tmp; the committed seeds are the
   durable public ones.
+
+## License
+
+PolyForm Noncommercial License 1.0.0 (see [LICENSE](LICENSE)). Free to use, modify, and share for any
+noncommercial purpose. Commercial use requires a separate license from the copyright holder.
