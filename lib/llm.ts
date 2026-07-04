@@ -122,6 +122,12 @@ interface OpenAICompatResponse {
   choices?: { message?: { content?: string; reasoning?: string } }[];
 }
 
+/** Per-call timeout so a stalled provider can't hang the request (and the
+ *  /api/run SSE stream) forever. Generous by default because kimi-k2.6:cloud
+ *  is a thinking model that legitimately takes 60-90s on the big prompts;
+ *  override with LLM_TIMEOUT_MS. The agents' own retries handle a timeout. */
+const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS) || 150_000;
+
 async function chatOpenAICompat(
   p: ProviderDescriptor, messages: ChatMessage[], opts: GenerateOpts
 ): Promise<string> {
@@ -135,6 +141,7 @@ async function chatOpenAICompat(
       temperature: opts.temperature ?? 0.4,
       max_tokens: opts.maxTokens ?? 2048,
     }),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`openai-compat HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const j: OpenAICompatResponse = await res.json();
@@ -169,6 +176,7 @@ async function chatAnthropic(
       temperature: opts.temperature ?? 0.4,
       max_tokens: opts.maxTokens ?? 2048,
     }),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`anthropic HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const j: AnthropicMessagesResponse = await res.json();

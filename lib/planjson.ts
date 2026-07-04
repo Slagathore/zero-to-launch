@@ -70,20 +70,42 @@ function stripThinking(text: string): string {
  *   - trailing commas before } or ]
  *   - // and /* ... *\/ comments
  *   - JS bareword keys (foo: → "foo":)
+ *
+ * CRITICAL: every structural repair runs on a version of the text where valid
+ * double-quoted string LITERALS have been masked out, so none of these rules
+ * can ever touch string CONTENT. Without this, a value like
+ * "Visit https://x.com — don't miss it," had its `//` stripped, its `don't`
+ * apostrophe treated as a single-quote delimiter, and "word: text" re-quoted —
+ * corrupting perfectly good model output and defeating the repair on exactly
+ * the realistic replies it exists to fix.
  */
 export function repairJsonish(s: string): string {
   if (!s) return s;
-  let out = s
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/\/\/.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "");
-  // single-quoted strings → double-quoted (only if they don't span lines or contain unescaped ")
+
+  // Smart quotes → straight delimiters first (rarely legit string content in
+  // model JSON), so the masking step below sees normal " and ' delimiters.
+  const normalized = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+
+  // Mask valid double-quoted strings so structural repairs can't see inside them.
+  const literals: string[] = [];
+  const S = String.fromCharCode(1); // U+0001 sentinel, cannot occur in JSON
+  let out = normalized.replace(/"(?:[^"\\]|\\.)*"/g, (m) => {
+    literals.push(m);
+    return `${S}${literals.length - 1}${S}`;
+  });
+
+  out = out
+    .replace(/\/\/.*$/gm, "") // // line comments (structure only now)
+    .replace(/\/\*[\s\S]*?\*\//g, ""); // /* block comments */
+  // single-quoted strings → double-quoted
   out = out.replace(/'([^'\\\n]*(?:\\.[^'\\\n]*)*)'/g, (_m, body) => `"${body.replace(/"/g, '\\"')}"`);
   // bareword object keys → quoted keys
   out = out.replace(/([{,]\s*)([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g, '$1"$2":');
   // trailing commas
   out = out.replace(/,(\s*[}\]])/g, "$1");
+
+  // Restore the masked string literals verbatim.
+  out = out.replace(new RegExp(`${S}(\\d+)${S}`, "g"), (_m, idx) => literals[Number(idx)] ?? "");
   return out;
 }
 

@@ -1,5 +1,40 @@
 import { describe, it, expect } from "vitest";
-import { extractFromHtml, extractFromText, getOffer, MAX_CONTENT_CHARS } from "../fetchOffer";
+import { extractFromHtml, extractFromText, getOffer, MAX_CONTENT_CHARS, isPrivateAddress, assertSafeUrl } from "../fetchOffer";
+
+describe("isPrivateAddress (SSRF guard)", () => {
+  it("flags loopback, private, link-local, CGNAT, and cloud-metadata IPs", () => {
+    for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fe80::1", "fc00::1", "fd12::3", "::ffff:127.0.0.1"]) {
+      expect(isPrivateAddress(ip)).toBe(true);
+    }
+  });
+  it("allows normal public IPs", () => {
+    for (const ip of ["1.1.1.1", "8.8.8.8", "93.184.216.34", "2606:4700:4700::1111"]) {
+      expect(isPrivateAddress(ip)).toBe(false);
+    }
+  });
+  it("treats non-IPs as unsafe", () => {
+    expect(isPrivateAddress("not-an-ip")).toBe(true);
+  });
+});
+
+describe("assertSafeUrl (SSRF guard)", () => {
+  it("rejects non-http(s) schemes", async () => {
+    await expect(assertSafeUrl("file:///etc/passwd")).rejects.toThrow(/http/i);
+    await expect(assertSafeUrl("gopher://x")).rejects.toThrow(/http/i);
+  });
+  it("rejects internal hostnames without resolving", async () => {
+    await expect(assertSafeUrl("http://localhost/x")).rejects.toThrow(/internal/i);
+    await expect(assertSafeUrl("http://foo.internal/x")).rejects.toThrow(/internal/i);
+  });
+  it("rejects a private IP literal", async () => {
+    await expect(assertSafeUrl("http://169.254.169.254/latest/meta-data")).rejects.toThrow(/private/i);
+    await expect(assertSafeUrl("http://127.0.0.1:8080")).rejects.toThrow(/private/i);
+  });
+  it("accepts a public IP literal", async () => {
+    const u = await assertSafeUrl("http://1.1.1.1/");
+    expect(u.hostname).toBe("1.1.1.1");
+  });
+});
 
 const ARTICLE_HTML = `<!doctype html><html><head><title>KetoSlim Offer</title></head>
 <body>

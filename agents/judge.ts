@@ -22,6 +22,7 @@ export interface AngleScore {
   headlineSeed: string;
   score: number;
   worstStatus: ComplianceVerdict["status"];
+  hasCopy: boolean; // whether any ad copy was generated for this angle
   breakdown: { compliance: number; completeness: number; platforms: number };
   reason: string; // short deterministic explanation of THIS angle's score
 }
@@ -70,17 +71,17 @@ export function scoreAngle(
 
   const completeness = mine.filter(isComplete).length; // +1 per complete ad
   const platforms = new Set(mine.map((c) => c.platform)).size; // reach across platforms
+  const hasCopy = mine.length > 0;
 
   const score = compliance + completeness + platforms;
 
-  const reason =
-    worstStatus === "block"
+  const reason = !hasCopy
+    ? "No ad copy was generated for this angle — not launchable."
+    : worstStatus === "block"
       ? "Has BLOCK-level copy — not launch-ready until fixed."
       : worstStatus === "flag"
         ? "Compliant with fixes; solid once flags are addressed."
-        : mine.length === 0
-          ? "No copy generated yet."
-          : "Clean across platforms — launch-ready.";
+        : "Clean across platforms — launch-ready.";
 
   return {
     angleId: angle.id,
@@ -88,6 +89,7 @@ export function scoreAngle(
     headlineSeed: angle.headlineSeed,
     score,
     worstStatus,
+    hasCopy,
     breakdown: { compliance, completeness, platforms },
     reason,
   };
@@ -106,12 +108,17 @@ export function rankAngles(angles: Angle[], copies: AdCopy[], verdicts: Complian
     .map(({ s }) => s);
 }
 
-/** Pick the launch set: top-N by score, but never recommend a BLOCK-level angle
- *  unless there is literally nothing cleaner. */
+/** Pick the launch set: top-N by score. An angle is only launchable if it
+ *  actually HAS ad copy (a copy-less angle — from a partial/truncated copy
+ *  stage — is never "launch-ready", however cleanly it scores) and isn't
+ *  BLOCK-level. We relax the block constraint before the has-copy one, and
+ *  never recommend a copy-less angle unless there is literally nothing with
+ *  copy at all. */
 export function selectLaunchSet(ranked: AngleScore[], angles: Angle[], n = DEFAULT_LAUNCH_SET_SIZE): Angle[] {
   const byId = new Map(angles.map((a) => [a.id, a]));
-  const launchable = ranked.filter((s) => s.worstStatus !== "block");
-  const pool = launchable.length > 0 ? launchable : ranked;
+  const withCopy = ranked.filter((s) => s.hasCopy);
+  const cleanWithCopy = withCopy.filter((s) => s.worstStatus !== "block");
+  const pool = cleanWithCopy.length > 0 ? cleanWithCopy : withCopy.length > 0 ? withCopy : ranked;
   return pool.slice(0, n).map((s) => byId.get(s.angleId)).filter((a): a is Angle => !!a);
 }
 
@@ -149,6 +156,7 @@ export function buildChecklist(
  *  informative, not a placeholder). */
 export function heuristicRationale(ranked: AngleScore[], launchSet: Angle[]): string {
   if (launchSet.length === 0) return "No launch-ready angles were found — generate copy and re-run the gate first.";
+  const launchIds = new Set(launchSet.map((a) => a.id));
   const picks = launchSet
     .map((a) => {
       const s = ranked.find((r) => r.angleId === a.id);
@@ -156,7 +164,9 @@ export function heuristicRationale(ranked: AngleScore[], launchSet: Angle[]): st
       return `“${a.headlineSeed}” (${a.hookType}, ${health})`;
     })
     .join("; ");
-  const blocked = ranked.filter((r) => r.worstStatus === "block").length;
+  // Only count blocked angles we actually held BACK — not ones we had to
+  // recommend anyway in an all-blocked fallback.
+  const blocked = ranked.filter((r) => r.worstStatus === "block" && !launchIds.has(r.angleId)).length;
   const tail = blocked ? ` ${blocked} angle(s) were held back for BLOCK-level policy violations.` : "";
   return `Recommended launch set, ranked by compliance health, cross-platform copy completeness, and hook diversity: ${picks}.${tail} These lead because they pair a distinct psychological hook with copy the gate can clear.`;
 }

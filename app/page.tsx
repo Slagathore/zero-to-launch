@@ -272,6 +272,7 @@ export default function Home() {
     if (!brief) return;
     setAnglesLoading(true);
     setError(null);
+    setSeeded(false); // a manual regeneration is always a live model call
     // Regenerating angles invalidates any copy/advertorial made for the old set.
     clearCopyAndDownstream();
     setAdvertorialUrl(null);
@@ -302,6 +303,7 @@ export default function Home() {
     if (!angle) return;
     setAdvertorialLoading(true);
     setError(null);
+    setSeeded(false); // a manual regeneration is always a live model call
     try {
       const res = await fetch("/api/advertorial", {
         method: "POST",
@@ -323,6 +325,7 @@ export default function Home() {
     if (!brief || !angles) return;
     setCopyLoading(true);
     setError(null);
+    setSeeded(false); // a manual regeneration is always a live model call
     try {
       const res = await fetch("/api/copy", {
         method: "POST",
@@ -362,6 +365,13 @@ export default function Home() {
   }
 
   const canRun = mode === "url" ? url.trim().length > 0 : text.trim().length > 0;
+
+  // Match each ad to its compliance verdict BY POSITION: compliance() returns
+  // verdicts in the same order as the copy array, so verdicts[i] belongs to
+  // copy[i]. Keying by (angleId, platform) instead would be wrong whenever a
+  // platform has two ads for the same angle (they'd share the first's verdict).
+  const verdictByCopy = new Map<AdCopy, ComplianceVerdict>();
+  if (copy && verdicts) copy.forEach((c, i) => { if (verdicts[i]) verdictByCopy.set(c, verdicts[i]); });
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-10 sm:py-14">
@@ -489,7 +499,7 @@ export default function Home() {
           <div className="mt-5 flex items-center gap-3">
             <button
               onClick={runAngles}
-              disabled={anglesLoading}
+              disabled={anglesLoading || running}
               className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               {anglesLoading ? "Generating angles…" : "Generate angles"}
@@ -522,7 +532,7 @@ export default function Home() {
           <div className="mt-5 flex items-center gap-3">
             <button
               onClick={runCopy}
-              disabled={copyLoading}
+              disabled={copyLoading || running}
               className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               {copyLoading ? "Writing copy…" : "Generate ad copy"}
@@ -553,7 +563,7 @@ export default function Home() {
               </h3>
               <div className="grid gap-3 sm:grid-cols-2">
                 {items.map((c, i) => {
-                  const verdict = verdictFor(verdicts, c);
+                  const verdict = verdictByCopy.get(c);
                   return (
                     <div key={`${c.angleId}-${i}`} className="flex flex-col rounded-xl border border-neutral-500/15 bg-neutral-500/5 p-4">
                       <div className="mb-2 flex items-center justify-between gap-2">
@@ -613,7 +623,7 @@ export default function Home() {
             </select>
             <button
               onClick={runAdvertorial}
-              disabled={advertorialLoading}
+              disabled={advertorialLoading || running}
               className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               {advertorialLoading ? "Writing advertorial…" : "Generate advertorial"}
@@ -706,11 +716,6 @@ function groupByPlatform(copy: AdCopy[]): [Platform, AdCopy[]][] {
 /** Look up the hook type of the angle a piece of copy was written for. */
 function hookFor(angles: Angle[], angleId: string): string {
   return angles.find((a) => a.id === angleId)?.hookType ?? "angle";
-}
-
-/** Match a compliance verdict to its ad by (angleId, platform). */
-function verdictFor(verdicts: ComplianceVerdict[] | null, c: AdCopy): ComplianceVerdict | undefined {
-  return verdicts?.find((v) => v.angleId === c.angleId && v.platform === c.platform);
 }
 
 function VerdictPill({ status, count }: { status: ComplianceVerdict["status"]; count: number }) {

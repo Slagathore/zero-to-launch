@@ -61,6 +61,34 @@ describe("selectLaunchSet", () => {
     const set = selectLaunchSet(ranked, angles, 2);
     expect(set).toHaveLength(2); // still returns something rather than nothing
   });
+
+  // Regression for the high-sev finding: a copy-less angle (from a partial /
+  // truncated copy stage) must NEVER be recommended as launch-ready.
+  it("excludes angles that have no ad copy, even though they score as clean 'pass'", () => {
+    const copyOnlyA1A2 = [...copyFor("a1"), ...copyFor("a2")]; // a3 has NO copy
+    const v = [
+      { angleId: "a1", platform: "meta", status: "pass", violations: [] },
+      { angleId: "a1", platform: "taboola", status: "pass", violations: [] },
+      { angleId: "a2", platform: "meta", status: "pass", violations: [] },
+      { angleId: "a2", platform: "taboola", status: "pass", violations: [] },
+    ] as ComplianceVerdict[];
+    const ranked = rankAngles(angles, copyOnlyA1A2, v);
+    const set = selectLaunchSet(ranked, angles, 3);
+    expect(set.map((a) => a.id)).not.toContain("a3"); // copy-less, excluded
+    expect(set.map((a) => a.id).sort()).toEqual(["a1", "a2"]);
+  });
+
+  it("prefers a blocked-but-has-copy angle over a clean-scoring copy-less angle", () => {
+    // a1 has copy but blocks; a3 has no copy (scores 0/pass). a1 must win.
+    const copyOnlyA1 = copyFor("a1");
+    const v = [
+      { angleId: "a1", platform: "meta", status: "block", violations: [{ ruleId: "x", severity: "block", offendingText: "t", fix: "f" }] },
+      { angleId: "a1", platform: "taboola", status: "block", violations: [{ ruleId: "x", severity: "block", offendingText: "t", fix: "f" }] },
+    ] as ComplianceVerdict[];
+    const ranked = rankAngles(angles, copyOnlyA1, v);
+    const set = selectLaunchSet(ranked, angles, 1);
+    expect(set.map((a) => a.id)).toEqual(["a1"]);
+  });
 });
 
 describe("buildChecklist", () => {

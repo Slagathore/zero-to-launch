@@ -33,6 +33,13 @@ describe("coerceOfferBrief", () => {
     expect(coerceOfferBrief({ complianceRisk: "nuclear" }, "").complianceRisk).toBe("med");
   });
 
+  it("accepts capitalized + synonym risk values instead of silently downgrading", () => {
+    expect(coerceOfferBrief({ complianceRisk: "High" }, "").complianceRisk).toBe("high");
+    expect(coerceOfferBrief({ complianceRisk: "LOW" }, "").complianceRisk).toBe("low");
+    expect(coerceOfferBrief({ complianceRisk: "Medium" }, "").complianceRisk).toBe("med");
+    expect(coerceOfferBrief({ complianceRisk: "moderate" }, "").complianceRisk).toBe("med");
+  });
+
   it("drops non-string array entries from list fields", () => {
     const brief = coerceOfferBrief({ usps: ["real", 42, null, "also real"] }, "");
     expect(brief.usps).toEqual(["real", "also real"]);

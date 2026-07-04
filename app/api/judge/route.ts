@@ -32,11 +32,10 @@ export async function POST(req: Request) {
   if (angles.length === 0) {
     return NextResponse.json({ ok: false, error: "No angles to judge." }, { status: 400 });
   }
-  // Prefer supplied verdicts; otherwise score the copy ourselves so the judge
-  // always factors compliance.
-  const verdicts: ComplianceVerdict[] = Array.isArray(body.verdicts) && body.verdicts.length > 0
-    ? (body.verdicts as ComplianceVerdict[])
-    : compliance(copy);
+  // Always (re)score the coerced copy ourselves rather than trust body.verdicts:
+  // the gate is deterministic + cheap, so recomputing guarantees the verdicts
+  // match the copy and can't be spoofed into inconsistent scoring.
+  const verdicts: ComplianceVerdict[] = compliance(copy);
   const advertorialUrl = typeof body.advertorialUrl === "string" ? body.advertorialUrl : "";
 
   const { result } = await judge({ brief, angles, copy, verdicts, advertorialUrl });

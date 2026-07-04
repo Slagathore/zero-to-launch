@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getOffer } from "@/lib/fetchOffer";
 import { research } from "@/agents/research";
 import { AgentJsonError } from "@/lib/agentJson";
 
@@ -10,6 +9,10 @@ import { AgentJsonError } from "@/lib/agentJson";
  * fallback), then run the Research Agent to produce an OfferBrief. Errors are
  * returned as { ok:false, error } with a helpful message (e.g. "paste the
  * offer text instead") rather than a 500, so the UI can guide the user.
+ *
+ * lib/fetchOffer is lazy-imported inside the handler: it pulls in jsdom, whose
+ * dynamic requires crash at MODULE LOAD in Vercel's serverless runtime — a
+ * top-level import would 500 the route uncatchably. (Same fix as /api/run.)
  */
 export async function POST(req: Request) {
   let body: { url?: string; text?: string };
@@ -20,6 +23,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    const { getOffer } = await import("@/lib/fetchOffer");
     const extraction = await getOffer({ url: body.url, text: body.text });
     const { brief, meta } = await research(extraction);
     return NextResponse.json({

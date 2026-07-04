@@ -63,6 +63,14 @@ ${meta}
 ${fenceUntrusted("offer", offer.content)}`;
 }
 
+/** Map risk synonyms onto the canonical low/med/high vocabulary. */
+function normalizeRisk(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  const s = v.trim().toLowerCase();
+  if (s === "medium" || s === "moderate" || s === "mid") return "med";
+  return s;
+}
+
 /** Coerce arbitrary parsed JSON into a valid, trusted OfferBrief. */
 export function coerceOfferBrief(raw: unknown, url: string): OfferBrief {
   const o = asRecord(raw);
@@ -78,7 +86,11 @@ export function coerceOfferBrief(raw: unknown, url: string): OfferBrief {
     },
     usps: asStringArray(o.usps),
     claimsDetected: asStringArray(o.claimsDetected),
-    complianceRisk: asEnum(o.complianceRisk, ["low", "med", "high"] as const, "med"),
+    // Normalize common synonyms ("medium"/"moderate" -> "med") before the enum
+    // clamp so a model that writes "Medium" isn't silently downgraded to the
+    // "med" fallback by coincidence (and "High"/"Low" survive via asEnum's
+    // case-insensitivity).
+    complianceRisk: asEnum(normalizeRisk(o.complianceRisk), ["low", "med", "high"] as const, "med"),
     notes: asString(o.notes),
   };
 }

@@ -92,6 +92,17 @@ describe("coerceAdvertorialContent", () => {
     expect(c.sections[1].type).toBe("paragraph");
   });
 
+  it("keeps sections when the model capitalizes the type (case-insensitive enum)", () => {
+    const c = coerceAdvertorialContent({
+      sections: [
+        { type: "Paragraph", text: "lede" },
+        { type: "BULLETS", text: "why", items: ["a", "b"] },
+        { type: "PullQuote", text: "quote" },
+      ],
+    }, BRIEF, ANGLE);
+    expect(c.sections.map((s) => s.type)).toEqual(["paragraph", "bullets", "pullquote", "cta"]); // + appended cta
+  });
+
   it("appends a CTA when the model omits one (structural invariant caught live)", () => {
     const c = coerceAdvertorialContent({
       sections: [{ type: "paragraph", text: "an article with no call to action" }],

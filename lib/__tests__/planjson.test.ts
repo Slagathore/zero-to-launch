@@ -12,6 +12,24 @@ describe("repairJsonish", () => {
   it("strips // comments", () => {
     expect(JSON.parse(repairJsonish('{"a":1 // note\n}'))).toEqual({ a: 1 });
   });
+
+  // Regression: structural repairs must NEVER touch string CONTENT.
+  it("preserves // inside a string value (URLs)", () => {
+    const out = repairJsonish('{"url":"https://example.com/path",}');
+    expect(JSON.parse(out)).toEqual({ url: "https://example.com/path" });
+  });
+  it("preserves apostrophes/contractions inside a string value", () => {
+    const out = repairJsonish(`{"copy":"Don't miss it — you won't regret it",}`);
+    expect(JSON.parse(out)).toEqual({ copy: "Don't miss it — you won't regret it" });
+  });
+  it("does not re-quote 'word:' text inside a string value", () => {
+    const out = repairJsonish('{"note":"summary: buy now, limit: two",}');
+    expect(JSON.parse(out)).toEqual({ note: "summary: buy now, limit: two" });
+  });
+  it("still fixes real barewords + trailing commas OUTSIDE strings", () => {
+    const out = repairJsonish("{ summary: \"the plan: do X\", steps: [1,2,], }");
+    expect(JSON.parse(out)).toEqual({ summary: "the plan: do X", steps: [1, 2] });
+  });
 });
 
 describe("extractPlanJson", () => {

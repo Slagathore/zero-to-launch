@@ -1,5 +1,7 @@
 import { Readability } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
+import { lookup } from "node:dns/promises";
+import net from "node:net";
 
 /**
  * Fetch + extract the readable content of an affiliate offer page so the
@@ -81,23 +83,129 @@ export function extractFromHtml(html: string, url: string): ExtractedOffer {
   return { source: "url", url, title: title || domTitle, content: text, excerpt, truncated };
 }
 
+/** Max bytes we'll buffer from an offer page — bounds a memory-exhaustion DoS
+ *  via an attacker-controlled URL that streams an enormous body. */
+const MAX_FETCH_BYTES = 5_000_000; // 5 MB of HTML is already absurd for an offer page
+
+/** Is an IP literal in a private / loopback / link-local / metadata range? */
+export function isPrivateAddress(ip: string): boolean {
+  const fam = net.isIP(ip);
+  if (fam === 4) {
+    const o = ip.split(".").map(Number);
+    if (o.length !== 4 || o.some((n) => Number.isNaN(n))) return true; // treat unparseable as unsafe
+    return (
+      o[0] === 0 || o[0] === 127 || o[0] === 10 || // this-host, loopback, private
+      (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || // 172.16/12
+      (o[0] === 192 && o[1] === 168) || // 192.168/16
+      (o[0] === 169 && o[1] === 254) || // link-local incl. 169.254.169.254 cloud metadata
+      (o[0] === 100 && o[1] >= 64 && o[1] <= 127) // CGNAT 100.64/10
+    );
+  }
+  if (fam === 6) {
+    const a = ip.toLowerCase();
+    if (a === "::1" || a === "::") return true; // loopback / unspecified
+    if (a.startsWith("fe80") || a.startsWith("fc") || a.startsWith("fd")) return true; // link-local / ULA
+    const mapped = a.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped
+    if (mapped) return isPrivateAddress(mapped[1]);
+    return false;
+  }
+  return true; // not a valid IP → unsafe
+}
+
+/**
+ * SSRF guard: validate an offer URL before fetching it. Enforces http(s),
+ * blocks obviously-internal hostnames, and resolves the host to reject any
+ * private / loopback / link-local / cloud-metadata address. This matters
+ * because the app is publicly reachable and fetches a user-supplied URL
+ * server-side — without this, a request could pivot to internal services or
+ * the cloud metadata endpoint.
+ */
+export async function assertSafeUrl(rawUrl: string): Promise<URL> {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    throw new Error("That doesn't look like a valid URL. Paste the offer text instead.");
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error("Only http(s) offer URLs are allowed. Paste the offer text instead.");
+  }
+  const host = u.hostname.replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+  if (/^(localhost|.*\.local|.*\.internal|.*\.localhost)$/i.test(host)) {
+    throw new Error("Refusing to fetch an internal host. Paste the offer text instead.");
+  }
+  // If it's already an IP literal, check it directly; otherwise resolve.
+  if (net.isIP(host)) {
+    if (isPrivateAddress(host)) throw new Error("Refusing to fetch a private address. Paste the offer text instead.");
+    return u;
+  }
+  let addrs: { address: string }[];
+  try {
+    addrs = await lookup(host, { all: true });
+  } catch {
+    throw new Error("Could not resolve the offer host. Paste the offer text instead.");
+  }
+  if (addrs.length === 0 || addrs.some((a) => isPrivateAddress(a.address))) {
+    throw new Error("Refusing to fetch that host (resolves to a private address). Paste the offer text instead.");
+  }
+  return u;
+}
+
+/** Read a response body up to a byte cap, aborting if it's exceeded. */
+async function readCapped(res: Response, maxBytes: number): Promise<string> {
+  const declared = Number(res.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error("Offer page is too large to process. Paste the offer text instead.");
+  }
+  if (!res.body) return (await res.text()).slice(0, maxBytes);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error("Offer page is too large to process. Paste the offer text instead.");
+      }
+      chunks.push(value);
+    }
+  }
+  return new TextDecoder("utf-8").decode(concatBytes(chunks, total));
+}
+
+function concatBytes(chunks: Uint8Array[], total: number): Uint8Array {
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.byteLength; }
+  return out;
+}
+
 /**
  * Fetch an offer URL and extract its readable content. Throws a descriptive
  * error (bad status, network failure, empty page) so the caller can surface
- * "try the pasted-text fallback" to the user.
+ * "try the pasted-text fallback" to the user. SSRF-guarded + size-capped.
  */
 export async function extractFromUrl(url: string): Promise<ExtractedOffer> {
+  const safe = await assertSafeUrl(url);
   let res: Response;
   try {
-    res = await fetch(url, { headers: FETCH_HEADERS, redirect: "follow", signal: AbortSignal.timeout(15_000) });
+    res = await fetch(safe, { headers: FETCH_HEADERS, redirect: "manual", signal: AbortSignal.timeout(15_000) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(`Could not fetch the offer URL (${msg}). Paste the offer text instead.`);
   }
+  // redirect:"manual" — a redirect could point at an internal host, bypassing
+  // the SSRF check. Treat any redirect as "use the pasted-text fallback".
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error("Offer URL redirected; follow it in your browser and paste the final page's text instead.");
+  }
   if (!res.ok) {
     throw new Error(`Offer URL returned HTTP ${res.status}. Paste the offer text instead.`);
   }
-  const html = await res.text();
+  const html = await readCapped(res, MAX_FETCH_BYTES);
   const extracted = extractFromHtml(html, url);
   if (!extracted.content || extracted.content.length < 40) {
     throw new Error(

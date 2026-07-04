@@ -69,7 +69,12 @@ export function asRecord(v: unknown): Record<string, unknown> {
   return typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {};
 }
 
-/** Clamp a value to one of `allowed`, else return `fallback`. */
+/** Clamp a value to one of `allowed`, else return `fallback`. Case-insensitive:
+ *  models routinely return "Paragraph" / "High" / "Meta" for a lowercase enum,
+ *  and a case-sensitive match would silently drop them to the fallback. */
 export function asEnum<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
-  return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+  if (typeof v !== "string") return fallback;
+  const lower = v.trim().toLowerCase();
+  const hit = (allowed as readonly string[]).find((a) => a.toLowerCase() === lower);
+  return (hit as T | undefined) ?? fallback;
 }
