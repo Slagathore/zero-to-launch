@@ -6,7 +6,7 @@ FTC-labeled advertorial pre-lander you can click, and a ranked launch set with a
 covers the pre-launch pipeline that a small media-buying team usually spends hours on, in a single
 run.
 
-Live: https://marketingapp-ashy.vercel.app
+Live: [https://marketingapp-ashy.vercel.app](https://aideas4ads.cognima.net/)
 
 Example generated advertorial: https://marketingapp-ashy.vercel.app/p/ketoslim-gummies-curiosity-bt2j
 
