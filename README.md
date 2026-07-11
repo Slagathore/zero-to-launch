@@ -1,6 +1,6 @@
 # Zero-to-Launch: Campaign Launch Agent
 
-Drop in an affiliate offer and get back a launch-ready campaign package: an offer brief, a set of
+Drop in an affiliate offer and get back a campaign package ready to launch: an offer brief, a set of
 distinct marketing angles, per-platform ad copy that has been checked by a compliance gate, a live
 FTC-labeled advertorial pre-lander you can click, and a ranked launch set with a day-1 checklist. It
 covers the pre-launch pipeline that a small media-buying team usually spends hours on, in a single
@@ -99,7 +99,7 @@ the same pipeline without touching the rest.
 
 ## Architecture
 
-Orchestration is hand-written, with no LangChain. The typed contracts in `agents/types.ts` define how
+Orchestration is handwritten, with no LangChain. The typed contracts in `agents/types.ts` define how
 the agents connect, and each agent is a single module you can read top to bottom.
 
 ```
