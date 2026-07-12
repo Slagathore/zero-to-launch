@@ -46,3 +46,8 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# AI marker files (local only, fleet-managed)
+CLAUDE.md
+.claude/
+AGENTS.md
